@@ -6,7 +6,7 @@ from src.agents.visibility_agent.prompts import EXTRACT_USER_ARTICLE_PROMPT
 from src.tools.web_extractor_tool import DIFFBOT_TOOL
 from src.utils.settings import get_key, settings
 from pydantic import AnyUrl
-from typing import Union
+from typing import Union, Optional
 from langgraph.graph import StateGraph
 from langgraph.graph import END, START
 from langgraph.prebuilt import ToolNode, tools_condition
@@ -36,7 +36,7 @@ MODEL_WITH_FALLBACK_EXTRACT_USER_ARTICLE= initialize_model_with_fallbacks(
     #tool_choice= "Web_scraping_tool"
 )
 
-
+### EXTRACT USER ARTICLE NODE ###
 async def extract_user_article(state:visibility_state):
 
     """
@@ -61,7 +61,10 @@ async def extract_user_article(state:visibility_state):
     user_url: AnyUrl = state["user_url"]
 
     # Let's initialize the scrapped_article object 
-    scrapped_article: dict[str,str] = {}
+    scrapped_article: Optional[Union[dict[str,str],str]] = {}
+
+    # lets initialize the boolean variable to confirm if output is returned so, that we can proceed with workflow
+    output_confirmation: bool = True 
 
     # lets get the DIFFBOT tool and generate the output of the node
     try:
@@ -72,16 +75,22 @@ async def extract_user_article(state:visibility_state):
         # lets execute the diffbot tool
         scrapping_output: EXTRACT_USER_ARTICLE_SCHEMA = await scrapping_tool._arun(user_url=user_url)
 
+        # lets define value of output_confirmation based on the output of the tool
+        if scrapping_output in ("Client/Server side error", "Invalid URL"):
+            output_confirmation = False 
+
         # lets store the output of the tool in the initialized variable
         scrapped_article: dict[str,str] = scrapping_output
 
-        return {"scrapped_article": scrapped_article}
+        return {"scrapped_article": scrapped_article,
+                "output_confirmation": output_confirmation}
 
     except Exception as e:
         raise RuntimeError(f"error raised due to {e}")
 
 
 
+### LLM ENTITIES EXTRACTOR ###
 
 
 
@@ -94,6 +103,15 @@ async def extract_user_article(state:visibility_state):
 
 
 
+
+
+### ROUTER TO CHECK IF WORKFLOW GOT TEXT TO PROCEED OR NOT ###
+
+def extract_user_article_router(state: visibility_state):
+    if state["output_confirmation"]:
+        return "text_extracted"
+    else:
+        return "text_not_extracted"
 
 
    ######      Let's Build the Graph      ######
@@ -101,12 +119,18 @@ async def extract_user_article(state:visibility_state):
 
 builder = StateGraph(state_schema=visibility_state)
 
-
 builder.add_node(node="extract_user_article",action=extract_user_article)
 
-builder.add_edge(START,"extract_user_article")
-builder.add_edge("extract_user_article",END)
 
+builder.add_edge(START, "extract_user_article")
+builder.add_conditional_edges(
+    source= "extract_user_article",
+    path= extract_user_article_router,
+    path_map= {
+        "text_extracted":END,
+        "text_not_extracted":END
+    }
+)
 
 workflow = builder.compile()
 

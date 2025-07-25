@@ -97,7 +97,7 @@ class DIFFBOT_TOOL(BaseTool):
         api_url = self.diffbot_url_generator(user_url)
 
         # lets use httpx to make GET request as it supports async I/O
-        timeout = httpx.Timeout(timeout=10, connect=7, read=5)
+        timeout = httpx.Timeout(timeout=30, connect=10, read=10)
         async with httpx.AsyncClient() as client:
             api_response = await client.get(api_url, timeout= timeout)
 
