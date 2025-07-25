@@ -53,10 +53,34 @@ async def extract_user_article(state:visibility_state):
     in the DIFFBOT tool.
 
     **Raises:**
-    It raises the error if tool 
-    
+    It raises the error if tool is unable to get initialized or API fails.
     
     """
+    
+    # let's get the input variable from the state
+    user_url: AnyUrl = state["user_url"]
+
+    # Let's initialize the scrapped_article object 
+    scrapped_article: dict[str,str] = {}
+
+    # lets get the DIFFBOT tool and generate the output of the node
+    try:
+
+        # lets get the instance of the diffbot tool class to access its method 
+        scrapping_tool = DIFFBOT_TOOL()
+        
+        # lets execute the diffbot tool
+        scrapping_output: EXTRACT_USER_ARTICLE_SCHEMA = await scrapping_tool._arun(user_url=user_url)
+
+        # lets store the output of the tool in the initialized variable
+        scrapped_article: dict[str,str] = scrapping_output
+
+        return {"scrapped_article": scrapped_article}
+
+    except Exception as e:
+        raise RuntimeError(f"error raised due to {e}")
+
+
 
 
 

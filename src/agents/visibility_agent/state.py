@@ -13,5 +13,7 @@ class visibility_state(MessagesState):
     user_url: AnyUrl
     
     # Output of the extract_user_article node. It contains the information about the user article 
-    article_scrapped: str
+    scrapped_article: dict[str,str]
+
+
 

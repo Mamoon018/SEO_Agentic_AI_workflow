@@ -9,7 +9,9 @@ from typing import Optional
 from langchain_core.tools import BaseTool
 from langchain_core.tools.base import ArgsSchema
 from pydantic import BaseModel, Field, AnyUrl
-
+import asyncio
+import httpx
+from httpx import AsyncClient
 
 from langchain_core.callbacks import (
     AsyncCallbackManagerForToolRun,
@@ -85,6 +87,33 @@ class DIFFBOT_TOOL(BaseTool):
         return parsed_result
 
 
+    async def _arun(self, user_url: AnyUrl):
+
+        # If URL is not provided then do not execute the tool
+        if not validators.url(user_url):
+            return "Invalid URL"
+
+        # lets get the api url using diffbot url generator
+        api_url = self.diffbot_url_generator(user_url)
+
+        # lets use httpx to make GET request as it supports async I/O
+        timeout = httpx.Timeout(timeout=10, connect=7, read=5)
+        async with httpx.AsyncClient() as client:
+            api_response = await client.get(api_url, timeout= timeout)
+
+        # lets parse the json format data
+        data_scrapped = api_response.json()
+
+        # If URL is not accessible then data_scrapped should contain "errorCode" in dictionary
+        if "errorCode" in data_scrapped:
+            return "Client/Server side error"
+
+        # lets get the output parsed
+        parsed_result = self.parse_diffbot_output(data_scrapped)
+
+        return parsed_result
+
+
     # lets generate the DIFFBOT API URL that will be used to request the data
     def diffbot_url_generator(self,url: AnyUrl):
 
@@ -140,7 +169,7 @@ def main():
     # TEST with invalid URL
     #url = "http://www.isnal.com/" 
     
-    result = diff_tool._run(user_url=url)
+    result =  asyncio.run(diff_tool._arun(user_url=url))
 
     print(result)
 
