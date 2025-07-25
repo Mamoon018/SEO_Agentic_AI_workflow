@@ -64,6 +64,9 @@ class Settings(BaseSettings):
     TAVILY_API_KEY: SecretStr | None = None
     EXA_API_KEY: SecretStr | None = None
 
+    # Web Scrapper tool
+    DIFFBOT_API_KEY: SecretStr | None = None
+
     # Observability and Monitoring
     OPIK_API_KEY: SecretStr | None = None
     OPIK_WORKSPACE: str | None = None
