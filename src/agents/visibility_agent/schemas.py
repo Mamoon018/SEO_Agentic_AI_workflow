@@ -13,11 +13,21 @@ class BaseStructuredModel(BaseModel):
 
 class EXTRACT_USER_ARTICLE_SCHEMA(BaseStructuredModel):
     """
-    It represents user_url of artcile and output of the DIFFBOT tool scrapping 
+    It represents output of the DIFFBOT tool scrapping 
     """
 
     scrapped_article: Optional[Union[dict[str,str],str]] = Field(
         ...,
         description= "It is output of the DIFFBOT tool that provides us scrapped information related to article.",
+    )
+
+class ENTITIES_EXTRACTOR_SCHEMA(BaseStructuredModel):
+    """
+    It represents the output of the entities extracted from the article
+    """
+
+    entities: list[str] = Field(
+        ...,
+        description= "These are the most important entities discussed in the article"
     )
 

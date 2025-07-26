@@ -1,8 +1,8 @@
 
 
 from src.agents.visibility_agent.state import visibility_state
-from src.agents.visibility_agent.schemas import EXTRACT_USER_ARTICLE_SCHEMA
-from src.agents.visibility_agent.prompts import EXTRACT_USER_ARTICLE_PROMPT
+from src.agents.visibility_agent.schemas import EXTRACT_USER_ARTICLE_SCHEMA, ENTITIES_EXTRACTOR_SCHEMA
+from src.agents.visibility_agent.prompts import ENTITIES_EXTRACTOR_PROMPT
 from src.tools.web_extractor_tool import DIFFBOT_TOOL
 from src.utils.settings import get_key, settings
 from pydantic import AnyUrl
@@ -25,12 +25,12 @@ from langchain_core.messages import HumanMessage
 from src.utils.models_initializer import initialize_model_with_fallbacks, get_mistral_model , get_openai_model
 
 # extract_user_article model
-MODEL_WITH_FALLBACK_EXTRACT_USER_ARTICLE= initialize_model_with_fallbacks(
+ENTITIES_EXTRACTOR_MODEL_WITH_FALLBACKS= initialize_model_with_fallbacks(
     primary_model_fn=get_mistral_model,
     primary_model_kwargs={"model_num": 2, "temperature": 0.5},
     fallback_model_fns=[get_mistral_model],
     fallback_model_kwargs_list=[{"model_num": 1, "temperature": 0.5}],
-    structured_output_schema=EXTRACT_USER_ARTICLE_SCHEMA,
+    structured_output_schema=ENTITIES_EXTRACTOR_SCHEMA,
     #bind_tools=True, 
     #tools=[DIFFBOT_TOOL()],
     #tool_choice= "Web_scraping_tool"
@@ -92,8 +92,49 @@ async def extract_user_article(state:visibility_state):
 
 ### LLM ENTITIES EXTRACTOR ###
 
+async def entities_extractor(state:visibility_state):
+    """
+    It extracts 1-3 most relevant entities from the text of the scrapped article.
 
+    It will use the 'state["scrapped_article"]' to identify and extract most relevant entities discussed
+    in the article in the context of the entire article. 
+    Those entities will serve as a foundation for generating seed keywords in google keyword planner (GKP).
 
+    **Args:**
+    scrapped_article (dict): It will be used to access title of the article and text of the article.
+
+    **Returns:**
+    Entities (list): It is the list of the relevant entities.
+
+    """
+
+    # lets get the required input variables
+    text_of_article: str = state["scrapped_article"].get("article_text","N/A")
+    title_of_article: str = state["scrapped_article"].get("title","N/A")
+
+    # lets get the prompt of the entities_extractor
+    prompt = PromptTemplate(
+        input_variables= ["text_of_article","title_of_article"],
+        template= ENTITIES_EXTRACTOR_PROMPT
+    )
+
+    entities_prompt = prompt.format(text_of_article= text_of_article, title_of_article=title_of_article)
+
+    # lets initialize the object to store the entities as a result of the node
+    entities: list[str] = []
+
+    # lets get the result of the LLM 
+    entities_extractor_response: ENTITIES_EXTRACTOR_SCHEMA = await ENTITIES_EXTRACTOR_MODEL_WITH_FALLBACKS.ainvoke(
+        input= [HumanMessage(content=entities_prompt)]
+    )
+
+    # lets store the output of the LLM in the entities object
+    entities: list[str] = entities_extractor_response.entities
+
+    # lets update the state with addition of entities in it
+    return {
+        "entities": entities
+    }
 
 
 
@@ -120,17 +161,18 @@ def extract_user_article_router(state: visibility_state):
 builder = StateGraph(state_schema=visibility_state)
 
 builder.add_node(node="extract_user_article",action=extract_user_article)
-
+builder.add_node(node="entities_extractor", action= entities_extractor)
 
 builder.add_edge(START, "extract_user_article")
 builder.add_conditional_edges(
     source= "extract_user_article",
     path= extract_user_article_router,
     path_map= {
-        "text_extracted":END,
+        "text_extracted":"entities_extractor",
         "text_not_extracted":END
     }
 )
+builder.add_edge("entities_extractor",END)
 
 workflow = builder.compile()
 

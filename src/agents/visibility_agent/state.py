@@ -18,5 +18,7 @@ class visibility_state(MessagesState):
     # bool for tool execution confirmation
     output_confirmation : bool
 
+    # list of entities extracted from the article
+    entities: list[str]
 
 
