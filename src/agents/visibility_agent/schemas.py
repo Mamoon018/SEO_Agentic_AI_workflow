@@ -31,3 +31,21 @@ class ENTITIES_EXTRACTOR_SCHEMA(BaseStructuredModel):
         description= "These are the most important entities discussed in the article"
     )
 
+class GKP_CALLER1(BaseStructuredModel):
+    """
+    It represents the output of the google keyword planner - 1st call which is a list of keywords.
+    """
+
+    gkp_planner_list1:  list[dict[str, str | int | dict[str,int]]] = Field(
+        ..., 
+        description= "It is the list of keywords that gkp fetches "
+    )
+
+class KEYWORD_SHORTLISTER_SCHEMA(BaseStructuredModel):
+    """
+    It represents the output of Elbow-index dynamic threshold method to shortlist only most relevant keywords
+    """
+    shortlisted_keywords: list[str] = Field(
+        ...,
+        description= "It is the list of the keywords with highest contribution to total search volume of all keywords"
+    )

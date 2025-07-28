@@ -1,7 +1,7 @@
 
 
 from src.agents.visibility_agent.state import visibility_state
-from src.agents.visibility_agent.schemas import EXTRACT_USER_ARTICLE_SCHEMA, ENTITIES_EXTRACTOR_SCHEMA
+from src.agents.visibility_agent.schemas import EXTRACT_USER_ARTICLE_SCHEMA, ENTITIES_EXTRACTOR_SCHEMA, KEYWORD_SHORTLISTER_SCHEMA
 from src.agents.visibility_agent.prompts import ENTITIES_EXTRACTOR_PROMPT
 from src.tools.web_extractor_tool import DIFFBOT_TOOL
 from src.utils.settings import get_key, settings
@@ -11,8 +11,12 @@ from langgraph.graph import StateGraph
 from langgraph.graph import END, START
 from langgraph.prebuilt import ToolNode, tools_condition
 import asyncio
+from src.agents.keywords_agent.nodes import GoogleKeywordsAPI
+from src.agents.visibility_agent.temp_data import planner_list1
 
 
+import numpy as np
+from itertools import accumulate
 import dotenv
 import os 
 dotenv.load_dotenv()
@@ -35,6 +39,14 @@ ENTITIES_EXTRACTOR_MODEL_WITH_FALLBACKS= initialize_model_with_fallbacks(
     #tools=[DIFFBOT_TOOL()],
     #tool_choice= "Web_scraping_tool"
 )
+
+# lets initialize the class of the google planner so, that we can use its method 
+gkp = GoogleKeywordsAPI()
+
+
+
+                                ####   Nodes of Graph   ####
+
 
 ### EXTRACT USER ARTICLE NODE ###
 async def extract_user_article(state:visibility_state):
@@ -137,6 +149,75 @@ async def entities_extractor(state:visibility_state):
     }
 
 
+### GKP CALLER - 1 NODE ###
+
+async def gkp_caller1(state:visibility_state):
+    """
+    It feeds all extracted entities to google keyword planner as seed keywords and in return google keyword planner
+    provides us relevant primary and secondary keywords along with their metrics and it also uses user_url as input along
+    with extracted entities.
+
+    **Args:**
+    entities (list): It is the list of extracted entities from the article. It will be used as seed keywords in Google Keyword Planner.
+    user_url (Anyurl): It is the url of an article provided by user.
+
+    **Returns:**
+    gkp_planner_list1: It is the list of the keywords of google planner
+    
+    """
+
+    # let's get the input variables
+    user_url: AnyUrl = state["user_url"]
+    entities: list[str] = state["entities"]
+
+
+    try:
+        # lets initialize the object that will store the gkp_planner_list1
+        #gkp_planner_list1: GKP_CALLER1 = await gkp.generate_keywords(keywords=entities,url=user_url)
+
+        # For now, we will use dummy results of the gkp.generate_keywords
+        gkp_planner_list1: list[dict[str, str | int | dict[str,int]]] = planner_list1
+
+
+        return {
+            "gkp_planner_list1": gkp_planner_list1
+        }
+
+    except Exception as e:
+        raise RuntimeError(f"error occured in gkp_caller due to {e}") from e
+
+
+
+### Keyword Processor Node
+
+async def keyword_shortlister(state:visibility_state):
+    """
+    It takes the keywords from the gkp_planner_list1 and based on the criteria to shortlist the top keywords only, it
+    generates the list in the output that contains only keywords with higher proportion of share in the total combined
+    search volume of all keywords.
+    
+    """
+
+    # lets get the input variable
+    gkp_planner_list1: list[dict[str, str | int | dict[str,int]]] = state["gkp_planner_list1"]
+
+    # lets initialize the shortlisted keywords
+    shortlisted_keywords: list[str] = []
+
+    try:
+        # lets get the keywords 
+        shortlisted_keywords_response: KEYWORD_SHORTLISTER_SCHEMA = keyword_processor(gkp_planner_list1)
+
+        # lets store the output of the node in the initialized variable
+
+        shortlisted_keywords = shortlisted_keywords_response
+
+        return {
+            "shortlisted_keywords": shortlisted_keywords
+        }
+
+    except Exception as e:
+        raise RuntimeError(f"Error occurred keyword shortlister node in {e}") from e 
 
 
 
@@ -144,6 +225,75 @@ async def entities_extractor(state:visibility_state):
 
 
 
+
+
+
+
+### GET THE TOP KEYWORDS FROM THE ### 
+
+def keyword_processor(mainkeyword_list):
+
+    # lets get the keyword planner list
+    raw_keyword_list = mainkeyword_list
+    # lets initialize the dictionary that will contain keywords and search volumes as values
+    keywords_metrics = {}
+    # list of the keywords
+    keywords = []
+    # list of the values
+    metrics = []
+
+    # lets fetch the keywords and their search volumes and put them all in a dict as keys & values
+    for nested_dict in raw_keyword_list:
+
+        keyword = nested_dict["text"]
+        metric = nested_dict["average_monthly_searches"]
+
+    # list of keywords and list of metrics
+        keywords.append(keyword)
+        metrics.append(metric)        
+
+    # lets get the dictionary of the keywords & search volumes
+    for x,y in zip(keywords,metrics):
+
+        keywords_metrics[x] = y
+
+    # lets sort the dictionary based on the search volumes in descending order
+    keywords_metrics = dict(sorted(keywords_metrics.items(), key= lambda x:x[1] , reverse=True))
+
+    # lets get the list of the values and list of the keys from the sorted dict
+    sorted_values = list(keywords_metrics.values())
+    sorted_keys = list(keywords_metrics.keys())
+    
+    # total search volume for all keywords
+    total_search_volume = 0
+    for volume_value in sorted_values:
+        total_search_volume += volume_value
+
+    # share of keyword value in total search volume
+    share_of_values = []
+    for metric_value in sorted_values:
+        prop_of_value = metric_value/total_search_volume
+        share_of_values.append(prop_of_value)
+    
+    # lets get the cumulative sum of all values
+    cumulative_share_of_values = list(accumulate(share_of_values))
+
+    # lets get the elbow-index for the 
+
+    """
+    1) Calculate the % by which each keyword contributes in the total search volume
+    2) Calculate the marginal change in the contribution of the each keyword in the total search volume
+    3) Keyword after which marginal contribution is least, that's the cutt-off point for us.
+    """
+
+    first_derivative = np.gradient(cumulative_share_of_values)
+    second_derivative = np.gradient(first_derivative)
+    elbow_index = int(np.argmin(second_derivative))
+
+    # final shortlisted keywords
+    shortlisted_keywords = sorted_keys[:elbow_index + 1]
+
+    return shortlisted_keywords
 
 
 ### ROUTER TO CHECK IF WORKFLOW GOT TEXT TO PROCEED OR NOT ###
@@ -162,6 +312,8 @@ builder = StateGraph(state_schema=visibility_state)
 
 builder.add_node(node="extract_user_article",action=extract_user_article)
 builder.add_node(node="entities_extractor", action= entities_extractor)
+builder.add_node(node="gkp_caller1", action=gkp_caller1)
+builder.add_node(node="keyword_shortlister", action=keyword_shortlister)
 
 builder.add_edge(START, "extract_user_article")
 builder.add_conditional_edges(
@@ -172,7 +324,9 @@ builder.add_conditional_edges(
         "text_not_extracted":END
     }
 )
-builder.add_edge("entities_extractor",END)
+builder.add_edge("entities_extractor","gkp_caller1")
+builder.add_edge("gkp_caller1", "keyword_shortlister")
+builder.add_edge("keyword_shortlister",END)
 
 workflow = builder.compile()
 
@@ -190,84 +344,3 @@ result = asyncio.run(workflow.ainvoke(inputs,config={"callbacks": [tracer]}))
 
 
 
-"""
-
-
-async def remaining_workflow_nodes(state:visibility_state):
-    
-    It is just for the testing purpose that if we get the article content scrapped then we will proceed with next node
-    after executing node with tool.
-    
-    print("All is good")
-
-
-async def router_scraping_comfirmation(state:visibility_state):
-    
-    It checks the value of the article_scrapped and decides if workflow should continue or not. In case link is not accessible,
-    then value of 'article_scrapped' will be 'None' so, then workflow should not continue.
-    
-    
-
-    if state["article_scrapped"] != None:
-        return "remaining_workflow"
-    if state["article_scrapped"] == None:
-        return "end"
-
-
-
-
-
-
-
-
-
-
-
-
-
-# lets define the builder 
-builder = StateGraph(state_schema=visibility_state)
-
-tools_list = [DIFFBOT_TOOL()]
-# lets add the nodes
-builder.add_node(node="extract_user_article", action= extract_user_article)
-builder.add_node(node="Web_scraping_tool", action= ToolNode(tools = tools_list))
-builder.add_node(node="remaining_workflow", action= remaining_workflow_nodes)
-
-# lets add edges
-builder.add_edge(START,extract_user_article)
-builder.add_conditional_edges(source=extract_user_article,
-                              path=tools_condition,
-                              path_map={
-                                  'tools': 'Web_scraping_tool',
-                                  '__end__': 'router_scraping_comfirmation'
-                              })
-builder.add_conditional_edges(
-    source=extract_user_article,
-    path= router_scraping_comfirmation,
-    path_map={
-        "remaining_workflow": "remaining_workflow_nodes",
-        "end": END
-    }
-)
-builder.add_edge(remaining_workflow_nodes,END)
-
-
-# lets compile the workflow 
-workflow = builder.compile()
-
-# Lets call the graph with Opik 
-opik_project_name = get_key(settings.OPIK_PROJECT_NAME)
-#opik_key = get_key(settings.OPIK_API_KEY)
-#opik_workspace = get_key(settings.OPIK_WORKSPACE)
-os.getenv("OPIK_API_KEY")
-
-
-tracer = OpikTracer(graph=workflow.get_graph(xray=True),project_name= opik_project_name)
-inputs = {"user_url": "https://medium.com/@vivekvjnk/introduction-to-tool-use-with-langgraphs-toolnode-0121f3c8c323"}
-result = asyncio.run(workflow.ainvoke(inputs,config={"callbacks": [tracer]}))
-#print(result["article_scrapped"])
-
-
-
-"""

@@ -21,4 +21,10 @@ class visibility_state(MessagesState):
     # list of entities extracted from the article
     entities: list[str]
 
+    # list of gkp planner keywords
+    gkp_planner_list1: list[dict[str, str | int | dict[str,int]]]
+
+    # list of the shortlisted keywords
+    shortlisted_keywords: list[str]
+
 
