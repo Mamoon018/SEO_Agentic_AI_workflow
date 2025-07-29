@@ -1,8 +1,8 @@
 
 
 from src.agents.visibility_agent.state import visibility_state
-from src.agents.visibility_agent.schemas import EXTRACT_USER_ARTICLE_SCHEMA, ENTITIES_EXTRACTOR_SCHEMA, KEYWORD_SHORTLISTER_SCHEMA
-from src.agents.visibility_agent.prompts import ENTITIES_EXTRACTOR_PROMPT
+from src.agents.visibility_agent.schemas import EXTRACT_USER_ARTICLE_SCHEMA, ENTITIES_EXTRACTOR_SCHEMA, KEYWORD_SHORTLISTER_SCHEMA, PROMPT_GENERATOR_SCHEMA, PROMPT_SEARCHER_SCHEMA
+from src.agents.visibility_agent.prompts import ENTITIES_EXTRACTOR_PROMPT, PROMPT_GENERATOR_PROMPT, PROMPT_SEARCHER_PROMPT
 from src.tools.web_extractor_tool import DIFFBOT_TOOL
 from src.utils.settings import get_key, settings
 from pydantic import AnyUrl
@@ -39,6 +39,18 @@ ENTITIES_EXTRACTOR_MODEL_WITH_FALLBACKS= initialize_model_with_fallbacks(
     #tools=[DIFFBOT_TOOL()],
     #tool_choice= "Web_scraping_tool"
 )
+
+# extract_user_article model
+PROMPT_GENERATOR_MODEL_WITH_FALLBACKS= initialize_model_with_fallbacks(
+    primary_model_fn=get_mistral_model,
+    primary_model_kwargs={"model_num": 2, "temperature": 0.5},
+    fallback_model_fns=[get_mistral_model],
+    fallback_model_kwargs_list=[{"model_num": 1, "temperature": 0.5}],
+    structured_output_schema=PROMPT_GENERATOR_SCHEMA,
+)
+
+
+
 
 # lets initialize the class of the google planner so, that we can use its method 
 gkp = GoogleKeywordsAPI()
@@ -188,7 +200,7 @@ async def gkp_caller1(state:visibility_state):
 
 
 
-### Keyword Processor Node
+### Keyword Processor Node ###
 
 async def keyword_shortlister(state:visibility_state):
     """
@@ -218,6 +230,95 @@ async def keyword_shortlister(state:visibility_state):
 
     except Exception as e:
         raise RuntimeError(f"Error occurred keyword shortlister node in {e}") from e 
+
+
+
+### Prompts Generator Node ###
+
+async def prompt_generator(state:visibility_state):
+    """
+    It takes the shortlisted keywords based as an input - and generate 5-10 contextual prompts using those keywords.
+    These contextual prompts are based on the user-intent that we catch from the keyword searches on web. 
+
+    1) What is contextual prompt? It is the prompt about the article topic with context which user would searching on LLMs.
+    We kept it contextual because users like to provide some context in their prompts in order to be more specific & precise while asking their queries to LLMs.
+    2) How are we generating contextual prompt? 
+        (a) What are possible contexts under which users are searching prompts?
+        That depends on the intent of user search. If users are looking for information about EV - then prompts will be information extraction based.
+        Different intent buckets to cover possible user contexts about any topic:
+        1) Informational: Benefits of EV?, Consequences of EV?, new updates in EV?, upcoming possibilities in EV?   
+        2) Navigational: How to guide charge EV?
+        3) Transactional: Buyers look for EV? highest sales of EV ?
+        4) Comparative: reviews, top, best, EV vs non-EV which got more speed?
+        These are the possible intent that can drive the different contexts in the user prompts. 
+            
+            -- We have one topic of article underconsideration --
+        (b) Identify the intent of the article - Is it Informational, Navigational, Transactional, Comparative? (How user would ideally want
+        to search to get article's information?)
+        (c) We have the entities of article - about which user intents to search. (What user can search (entities user possibly interested in) 
+        about the article?)
+        (d) GKP-Keywords help us identifying the "intent of the users on web" & "entities they are interested in"
+        (e) Now, we know user's interests & intent about topic on web - we know what interests & intent of user our article addresses.
+        (f) Questions based on the intent & interests of the user about topic, under the context in which article is addressing that intent & 
+        interest - prompts will be based!
+        (g) LLM needs to think about this whole scenario for broader context - we are only providing a direction.
+
+        For Example: 
+        Topic: Study in Germany for Pakistani students?
+        Entities in article: german universities, free education in germany, top german universities, pakistani students
+        gkp-keywords: fee in germany, german universities, scholarhips in germany, jobs in germany
+
+        Search Intent of users: fee in germany, scholarship in germany, jobs in germany (Informational) 
+        Entities users interested in: fee, universities, scholarship, jobs
+        inferring context from above two data-points: Interested in expense of students, subsidies for students, career oppotunities in germany
+
+        prompts: 
+        Option-1: Prompts totally based on user intent & interested entities (Are german universities free?)
+        Option-2: Prompts based on user intent & interested entites & in the context article addresses those intents & interests.
+        suppose article has covered public-privdate universities fees comparison.
+        (What is the difference in the expense of students studying in private universities as compare to studying in public universities?)
+    
+    """
+
+    # lets get the input variables from state
+    article_text: str = state["scrapped_article"].get("article_text","N/A")
+    article_title: str = state["scrapped_article"].get("title","N/A")
+    entities: list[str] = state["entities"]
+    shortlisted_keywords: list[str] = state["shortlisted_keywords"]
+
+    # lets get the prompt of the node
+    prompt = PromptTemplate(input_variables= ["article_text", "article_title", "entities", "shortlisted_keywords"],
+                            template=PROMPT_GENERATOR_PROMPT)
+    
+    keyword_generator_prompt = prompt.format(article_text=article_text,article_title=article_title,
+                                            entities=entities, shortlisted_keywords=shortlisted_keywords)
+    
+    # lets initialize the list to store prompts
+    contextual_prompts: list[str] = []
+
+    try:
+
+        prompt_generator_response: PROMPT_GENERATOR_SCHEMA = await PROMPT_GENERATOR_MODEL_WITH_FALLBACKS.ainvoke(
+            input= [HumanMessage(content=keyword_generator_prompt)]
+        )
+
+        contextual_prompts = prompt_generator_response.contextual_prompts
+
+        return {
+            "contextual_prompts": contextual_prompts
+        }
+
+    except Exception as e:
+        raise RuntimeError(f"error raised in prompt_generator node due to {e}") from e
+
+
+
+
+
+
+
+
+
 
 
 
@@ -314,6 +415,7 @@ builder.add_node(node="extract_user_article",action=extract_user_article)
 builder.add_node(node="entities_extractor", action= entities_extractor)
 builder.add_node(node="gkp_caller1", action=gkp_caller1)
 builder.add_node(node="keyword_shortlister", action=keyword_shortlister)
+builder.add_node(node="prompt_generator", action=prompt_generator)
 
 builder.add_edge(START, "extract_user_article")
 builder.add_conditional_edges(
@@ -326,7 +428,8 @@ builder.add_conditional_edges(
 )
 builder.add_edge("entities_extractor","gkp_caller1")
 builder.add_edge("gkp_caller1", "keyword_shortlister")
-builder.add_edge("keyword_shortlister",END)
+builder.add_edge("keyword_shortlister","prompt_generator")
+builder.add_edge("prompt_generator",END)
 
 workflow = builder.compile()
 

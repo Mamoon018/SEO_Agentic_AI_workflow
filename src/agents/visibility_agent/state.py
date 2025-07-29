@@ -12,7 +12,7 @@ class visibility_state(MessagesState):
     # Input url of the user
     user_url: AnyUrl
     
-    # Output of the extract_user_article node. It contains the information about the user article 
+    # Output of the extract_user_article node. It contains the information about the user article (either scrapped data or error message)
     scrapped_article: Optional[Union[dict[str,str],str]]
 
     # bool for tool execution confirmation
@@ -27,4 +27,12 @@ class visibility_state(MessagesState):
     # list of the shortlisted keywords
     shortlisted_keywords: list[str]
 
+    # list of contextual-prompts
+    contextual_prompts: list[str]
+
+    # list of the articles read by LLM
+    read_articles: list[str]
+
+    # list of the articles cited by LLM
+    cited_articles: list[str]
 
