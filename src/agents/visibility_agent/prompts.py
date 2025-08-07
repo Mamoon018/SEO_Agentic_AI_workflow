@@ -75,19 +75,19 @@ Here is the title of the article:
 """
 
 PROMPT_SEARCHER_PROMPT = """
-You are a Search Engine Optimization expert and Generative Engine Optimization expert. You will be provided with the list of contextual_prompts
-that are basically considered as prompts which users are searching on LLMs. 
-Now, we need to check when you search these prompts then which articles do you read in order to answer these queries, and which articles
-do you quote in your output as part of your response to the searched prompt.
+You are a Search Engine Optimization expert and Generative Engine Optimization expert. You will be provided with the contextual_prompt
+that are basically considered as prompt which users are searching on LLMs. 
+You need to answer that prompt so, that we can see if user searches prompt then what answers it will get. Also, you need to use
+pre-built web search tool of perplexity that it uses to web search articles for using in generating its response and also
+cite those articles which you have used. 
 
-You need to generate two types of information in the following format:
-1) The articles read to generate your quote. It is generally the articles which you considered for the response but did not cite them.
-[article_read1, article_read2, article_read3]
+1) Store the output of the response in the following way
+perplexity_response = list[dict] --> [contextual_prompts: what is XYZ?, llm_Response: It is XYZ]
 
-2) The articles that you quoted in your response as part of your output to the input prompt.
-[article_cited1, article_cited2, article_cited3]
+2) you need to store the metadata of search results
+perplexity_response_articles = =list[dict]
 
-Here is the list of the prompts:
+Here is the contextual_prompts:
 {contextual_prompts}
 """
 

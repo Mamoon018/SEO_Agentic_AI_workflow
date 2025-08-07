@@ -8,8 +8,8 @@ from src.utils.settings import get_key, settings
 from pydantic import AnyUrl
 from typing import Union, Optional
 from langgraph.graph import StateGraph
+from langgraph.types import Send
 from langgraph.graph import END, START
-from langgraph.prebuilt import ToolNode, tools_condition
 import asyncio
 from src.agents.keywords_agent.nodes import GoogleKeywordsAPI
 from src.agents.visibility_agent.temp_data import planner_list1
@@ -24,9 +24,9 @@ import opik
 opik.configure(use_local=False)
 from opik.integrations.langchain import OpikTracer
 from langchain_core.prompts import PromptTemplate
-from langchain_core.messages import HumanMessage
+from langchain_core.messages import HumanMessage, AIMessage
 
-from src.utils.models_initializer import initialize_model_with_fallbacks, get_mistral_model , get_openai_model
+from src.utils.models_initializer import initialize_model_with_fallbacks, get_mistral_model , get_openai_model, get_perplexity_model
 
 # extract_user_article model
 ENTITIES_EXTRACTOR_MODEL_WITH_FALLBACKS= initialize_model_with_fallbacks(
@@ -40,7 +40,7 @@ ENTITIES_EXTRACTOR_MODEL_WITH_FALLBACKS= initialize_model_with_fallbacks(
     #tool_choice= "Web_scraping_tool"
 )
 
-# extract_user_article model
+# Prompt generator model
 PROMPT_GENERATOR_MODEL_WITH_FALLBACKS= initialize_model_with_fallbacks(
     primary_model_fn=get_mistral_model,
     primary_model_kwargs={"model_num": 2, "temperature": 0.5},
@@ -49,7 +49,14 @@ PROMPT_GENERATOR_MODEL_WITH_FALLBACKS= initialize_model_with_fallbacks(
     structured_output_schema=PROMPT_GENERATOR_SCHEMA,
 )
 
-
+# Perplexity citation for prompts
+PERPLEXITY_CITATION_FOR_PROMPTS_MODEL_WITH_FALLBACKS= initialize_model_with_fallbacks(
+    primary_model_fn=get_perplexity_model,
+    primary_model_kwargs={"model_num":1, "temperature":0.5},
+    fallback_model_fns=[get_perplexity_model],
+    fallback_model_kwargs_list=[{"model_num":2,"temperature":0.5}],
+    structured_output_schema=PROMPT_SEARCHER_SCHEMA
+)
 
 
 # lets initialize the class of the google planner so, that we can use its method 
@@ -313,19 +320,57 @@ async def prompt_generator(state:visibility_state):
 
 
 
+# lets use the perplexity model to get the search results
+async def perplexity_citations_for_prompts(state:visibility_state):
+    """
+    It takes the generated contextual prompts as an input and generate the responses for it to simulate the user
+    searches and then check which articles are appearing in the response. 
+    
+    """
+
+    # lets get the input variables
+    contextual_prompts: str = state["contextual_prompts"]
+
+    # lets get the prompt of the node
+    prompt = PromptTemplate(input_variables= "contextual_prompts", template=PROMPT_SEARCHER_PROMPT)
+    perplexity_citations_for_prompts_prompt = prompt.format(contextual_prompts=contextual_prompts)
+
+    # lets initialize the object to store the output of the node
+    perplexity_response: list[dict] = []
+    
+    # lets invoke the llm
+
+    citation_results: PROMPT_SEARCHER_SCHEMA = await PERPLEXITY_CITATION_FOR_PROMPTS_MODEL_WITH_FALLBACKS.ainvoke(
+        input= [HumanMessage(content=perplexity_citations_for_prompts_prompt)]
+    )
+    
+    # lets get the result and store it
+    perplexity_response = citation_results.perplexity_response
+
+    return {
+        "perplexity_response": perplexity_response
+    }
+
+    # Lets use the LangGraph SEND API that will be use defined llm node for all the prompts in parallelization style
+
+async def continue_perplexity_citations_for_prompts(state:visibility_state):
+    return  [Send("perplexity_citations_for_prompts",{"contextual_prompts": cp}) for cp in state["contextual_prompts"]]
+    # Here send will take each contextual prompt and pass it to the target node specified as param. It will pass 
+    # all prompts parallely. 
 
 
+# lets get the reducer node
+async def perplexity_reducer(state:visibility_state):
 
+    perplexity_response = state["perplexity_response"]
 
+    final_cited_article = []
 
+    final_cited_article = perplexity_response
 
-
-
-
-
-
-
-
+    return {
+        "final_cited_article" : final_cited_article
+    }
 
 
 
@@ -416,6 +461,8 @@ builder.add_node(node="entities_extractor", action= entities_extractor)
 builder.add_node(node="gkp_caller1", action=gkp_caller1)
 builder.add_node(node="keyword_shortlister", action=keyword_shortlister)
 builder.add_node(node="prompt_generator", action=prompt_generator)
+builder.add_node(node="perplexity_citations_for_prompts", action=perplexity_citations_for_prompts)
+builder.add_node(node="perplexity_reducer", action=perplexity_reducer)
 
 builder.add_edge(START, "extract_user_article")
 builder.add_conditional_edges(
@@ -429,7 +476,14 @@ builder.add_conditional_edges(
 builder.add_edge("entities_extractor","gkp_caller1")
 builder.add_edge("gkp_caller1", "keyword_shortlister")
 builder.add_edge("keyword_shortlister","prompt_generator")
-builder.add_edge("prompt_generator",END)
+builder.add_conditional_edges(
+    "prompt_generator",
+    continue_perplexity_citations_for_prompts,
+    ["perplexity_citations_for_prompts"]
+)
+builder.add_edge("perplexity_citations_for_prompts","perplexity_reducer")
+builder.add_edge("perplexity_reducer", END)
+
 
 workflow = builder.compile()
 

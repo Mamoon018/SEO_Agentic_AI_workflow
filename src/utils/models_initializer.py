@@ -7,6 +7,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_mistralai import ChatMistralAI
 from langchain_openai import ChatOpenAI
 from langchain_groq import ChatGroq
+from langchain_perplexity import ChatPerplexity
 from tavily import (
     TavilyClient,
     AsyncTavilyClient,
@@ -207,6 +208,40 @@ def get_groq_model(model_num: int = 1, temperature: float = 0.2) -> ChatGroq:
     )
 
     return groq_llm
+
+
+# Perplexity Model
+def get_perplexity_model(model_num: int = 1, temperature: float = 0.5) -> ChatPerplexity:
+    """
+    This function initialize the perplexity llm
+
+    **Args**
+    model_num (int): It is the model number that represent model we want to choose out of all options
+    temperatuire (int): It controls the randomness of the model - to control deterministic behavior of the llm
+
+    **Returns**
+    It returns the ChatPerplexity 
+    
+    """
+    # lets get the api key
+    pplx_api: SecretStr | None = get_key(api_key= settings.PERPLEXITY_API_KEY)
+    if pplx_api is None:
+        raise ValueError("Perplexity API KEY is not valid - check env. variables")
+
+    # lets define the dictionary of the models 
+    models = {
+        1:"sonar",
+        2:"sonar-pro"
+    }
+
+    # lets initialize the ChatPerplexity
+    perplexity_llm = ChatPerplexity(
+        model= models.get(model_num,"sonar-pro"),
+        temperature= temperature,
+        api_key= pplx_api
+    )
+
+    return perplexity_llm
 
 
 # Tavily Web Search

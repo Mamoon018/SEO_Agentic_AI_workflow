@@ -3,7 +3,7 @@ Here we will define the schemas of the Nodes
 """
 
 from pydantic import BaseModel, Field, AnyUrl
-from typing import Optional, Union
+from typing import Optional, Union, Annotated
 
 class BaseStructuredModel(BaseModel):
     class Config:        
@@ -61,13 +61,10 @@ class PROMPT_GENERATOR_SCHEMA(BaseStructuredModel):
 
 class PROMPT_SEARCHER_SCHEMA(BaseStructuredModel):
     """
-    It represents the output that contains the articles which LLM read to generate response and articles which are quoted in the LLM response
+    It represents the output that contains the articles that LLM considered in order to generate the response.
     """
-    read_articles: list[str] = Field(
+    perplexity_response: list[dict] = Field(
         ...,
-        description= "it contains the list of the articles which LLM read to generate the response"
+        description= "It contains the response for the contextual prompt"
     )
-    cited_articles: list[str] = Field(
-        ...,
-        description= "It contains the list of the articles which are cited by the LLM in its response"
-    )
+

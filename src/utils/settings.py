@@ -59,6 +59,7 @@ class Settings(BaseSettings):
     GROQ_API_KEY: SecretStr | None = None
     MISTRAL_API_KEY: SecretStr | None = None
     OPENAI_API_KEY: SecretStr | None = None
+    PERPLEXITY_API_KEY: SecretStr | None = None 
 
     # Web Search APIs
     TAVILY_API_KEY: SecretStr | None = None

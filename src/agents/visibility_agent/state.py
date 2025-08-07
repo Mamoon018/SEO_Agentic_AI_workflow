@@ -2,10 +2,10 @@
 Lets build the state for the visibility agent 
 """
 # Let's get the imports
-from typing import Optional, Union
+from typing import Optional, Union, Annotated
 from pydantic import AnyUrl
 from langgraph.graph import MessagesState
-
+import operator
 
 class visibility_state(MessagesState):
 
@@ -30,9 +30,9 @@ class visibility_state(MessagesState):
     # list of contextual-prompts
     contextual_prompts: list[str]
 
-    # list of the articles read by LLM
-    read_articles: list[str]
-
     # list of the articles cited by LLM
-    cited_articles: list[str]
+    perplexity_response: Annotated[list[dict], operator.add]
+
+    # final cited articles of perplexity (reducer)
+    final_cited_articles: list[dict]
 
