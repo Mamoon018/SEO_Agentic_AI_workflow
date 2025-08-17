@@ -31,8 +31,6 @@ class visibility_state(MessagesState):
     contextual_prompts: list[str]
 
     # list of the articles cited by LLM
-    perplexity_response: Annotated[list[dict], operator.add]
+    perplexity_response: Annotated[list[str], operator.add]
 
-    # final cited articles of perplexity (reducer)
-    final_cited_articles: list[dict]
 

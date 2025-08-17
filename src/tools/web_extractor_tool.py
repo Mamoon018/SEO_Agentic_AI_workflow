@@ -148,7 +148,7 @@ class DIFFBOT_TOOL(BaseTool):
         scrapping_result = {
             "title": title,
             "contentlanguage": contentlanguage,
-            "article_text": article_text[1: 500],
+            "article_text": article_text[1: 500], # applied limit only for testing purposes
             "content_type": content_type,
             "website": website,
             "published_date": published_date,

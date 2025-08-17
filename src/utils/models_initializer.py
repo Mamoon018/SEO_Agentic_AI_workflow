@@ -2,12 +2,14 @@
 here we initialize our langchain models and web search sdks so we can just import them in rest of our app.
 """
 
+import httpx
 from typing import Any, Callable, Union
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_mistralai import ChatMistralAI
 from langchain_openai import ChatOpenAI
 from langchain_groq import ChatGroq
 from langchain_perplexity import ChatPerplexity
+from perplexipy import PerplexityClient
 from tavily import (
     TavilyClient,
     AsyncTavilyClient,
@@ -211,38 +213,47 @@ def get_groq_model(model_num: int = 1, temperature: float = 0.2) -> ChatGroq:
 
 
 # Perplexity Model
-def get_perplexity_model(model_num: int = 1, temperature: float = 0.5) -> ChatPerplexity:
-    """
-    This function initialize the perplexity llm
+async def get_perplexity_llm(model_num: int = 1, prompt:str = None):
+        """
+        It returns the url, headers, payload variables which will be used in initializing the httpx request.
+        """
 
-    **Args**
-    model_num (int): It is the model number that represent model we want to choose out of all options
-    temperatuire (int): It controls the randomness of the model - to control deterministic behavior of the llm
+        # lets get api of perplexity
+        get_perplexity_api: SecretStr | None = get_key(api_key=settings.PERPLEXITY_API_KEY)
+        if get_perplexity_api is None:
+            raise ValueError("Perplexity api is not set, please check .env")
+        
+        # lets get base url of perplexity
+        get_perplexity_base_url: SecretStr | None = get_key(api_key= settings.PERPLEXITY_BASE_URL)
+        if get_perplexity_base_url is None:
+            raise ValueError("Perplexity base url is not set, please check .env")
 
-    **Returns**
-    It returns the ChatPerplexity 
-    
-    """
-    # lets get the api key
-    pplx_api: SecretStr | None = get_key(api_key= settings.PERPLEXITY_API_KEY)
-    if pplx_api is None:
-        raise ValueError("Perplexity API KEY is not valid - check env. variables")
+        # lets get the available perplexity models
+        models = {1: "sonar", 2: "sonar-pro"}
 
-    # lets define the dictionary of the models 
-    models = {
-        1:"sonar",
-        2:"sonar-pro"
-    }
+        url = get_perplexity_base_url
+        headers = {"Authorization": f"Bearer {get_perplexity_api}"}
+        payload = {
+            "model": models.get(model_num,"sonar-pro"),
+            "messages": [
+                {
+                    "role": "user",
+                    "content": f"{prompt}"
+                }
+            ]
+        }
 
-    # lets initialize the ChatPerplexity
-    perplexity_llm = ChatPerplexity(
-        model= models.get(model_num,"sonar-pro"),
-        temperature= temperature,
-        api_key= pplx_api
-    )
+        # lets get the asyncClient for api call using httpx
+        async with httpx.AsyncClient(timeout=45) as asyncclient:
+            try:
+                response = await asyncclient.post(url=url, headers=headers, json= payload)
 
-    return perplexity_llm
+                response.status_code
 
+                return response.text
+            except ConnectionError as e:
+                raise ConnectionError("Perplexity api is not reachable")
+        
 
 # Tavily Web Search
 def get_tavily_client(return_async: bool = False) -> TavilyClient | AsyncTavilyClient:
@@ -418,3 +429,5 @@ def initialize_model_with_fallbacks(
         )
 
     return primary_model
+
+

@@ -59,12 +59,30 @@ class PROMPT_GENERATOR_SCHEMA(BaseStructuredModel):
         description= "It is the list of the contextual prompts"
     )
 
-class PROMPT_SEARCHER_SCHEMA(BaseStructuredModel):
+class PROMPT_CITATION_FORMAT_SCHEMA(BaseStructuredModel):
     """
-    It represents the output that contains the articles that LLM considered in order to generate the response.
+    It contains the fields which are going to be the part of the information that llm will be generating in the 
+    structured output
     """
-    perplexity_response: list[dict] = Field(
+    context_prompt: str = Field(
+        ..., description= "It is the contextual prompt that is the part of the perplexity output"
+    )
+    cited_articles: list[str] = Field(
+        ..., 
+        description= "It is the list of the articles cited for the answer of the given contextual prompt"
+    )
+    response_for_prompt: str = Field(
         ...,
-        description= "It contains the response for the contextual prompt"
+        description= "It is the answer of perplexity for the contexual prompt - it does not include articles"
+    )
+
+class PROMPT_CITATION_FORMATTER_SCHEMA(BaseStructuredModel):
+    """
+    It represents the output that contains the information about contextual prompt, cited articles, and peprlexity answer
+    in a cleaner format
+    """
+    prompts_with_citations: list[PROMPT_CITATION_FORMAT_SCHEMA] = Field(
+        ...,
+        description= "It contains the list of data points for multiple contextual prompts according to the defined format of PROMPT_CITATION_FORMAT_SCHEMA "
     )
 
