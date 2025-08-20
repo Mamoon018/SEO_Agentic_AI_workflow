@@ -2,7 +2,7 @@
 
 from src.agents.visibility_agent.state import visibility_state
 from src.agents.visibility_agent.schemas import EXTRACT_USER_ARTICLE_SCHEMA, ENTITIES_EXTRACTOR_SCHEMA, KEYWORD_SHORTLISTER_SCHEMA, PROMPT_GENERATOR_SCHEMA, PROMPT_CITATION_FORMATTER_SCHEMA
-from src.agents.visibility_agent.prompts import ENTITIES_EXTRACTOR_PROMPT, PROMPT_GENERATOR_PROMPT, PROMPT_SEARCHER_PROMPT, PROMPTS_CITATION_FORMATTER_PROMPT
+from src.agents.visibility_agent.prompts import ENTITIES_EXTRACTOR_PROMPT, PROMPT_GENERATOR_PROMPT, PROMPT_SEARCHER_PROMPT, PROMPTS_CITATION_FORMATTER_PROMPT, GEO_METRICS_PROMPT
 from src.tools.web_extractor_tool import DIFFBOT_TOOL
 from src.utils.settings import get_key, settings
 from pydantic import AnyUrl
@@ -24,7 +24,7 @@ import opik
 opik.configure(use_local=False)
 from opik.integrations.langchain import OpikTracer
 from langchain_core.prompts import PromptTemplate
-from langchain_core.messages import HumanMessage, AIMessage
+from langchain_core.messages import HumanMessage
 
 from src.utils.models_initializer import initialize_model_with_fallbacks, get_mistral_model , get_openai_model, get_perplexity_llm
 
@@ -388,9 +388,48 @@ async def prompts_citation_reducer(state:visibility_state):
         [HumanMessage(content=prompts_citation_formatter_prompt)]
     )
 
-    prompts_with_citations = formatter_response
+    prompts_with_citations = formatter_response.prompts_with_citations
 
-    return prompts_with_citations
+    return {
+            "prompts_with_citations": prompts_with_citations
+            }
+
+
+
+## Node for Metrics ##
+
+async def geo_metrics(state:visibility_state):
+    """
+    This node takes the structured output of perplexity response for each prompt as an input, and uses it 
+    to calculate the different metrics and then give structured output for those metrics.
+
+    **Args:**
+    prompts_with_citations (list): It is the list of the datapoints that contains information about the perplexity output in structured way
+
+    **Returns:**
+    It return output containing list of different metrics
+    
+    """
+
+    # lets get the input variable from state
+    prompts_with_citations = state["prompts_with_citations"]
+    user_url = state["user_url"]
+
+    # lets get the prompt 
+    prompt = PromptTemplate(input_variables= "prompts_with_citations", template= GEO_METRICS_PROMPT)
+    GEO_PROMPT = prompt.format(prompts_with_citations= prompts_with_citations)
+
+    # lets initialize the input variable to store the metrics
+    geo_metrics = []
+
+    # lets invoke the LLM to get the metrics
+
+
+
+
+
+
+
 
 
 

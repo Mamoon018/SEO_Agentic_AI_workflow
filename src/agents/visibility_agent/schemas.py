@@ -59,6 +59,26 @@ class PROMPT_GENERATOR_SCHEMA(BaseStructuredModel):
         description= "It is the list of the contextual prompts"
     )
 
+class CITED_ARTICLES_INFO(BaseStructuredModel):
+    """
+    It contains the field that includes the information about the cited articles, like 
+    title of the articles, date, last date updated, & urls.
+    """
+    article_title: str = Field(
+        ..., description= "It is the list of the titles of the cited articles"
+    )
+    article_date: str = Field(
+        ..., description= "It contains the list of date of the cited article"
+    )
+    article_last_update: str = Field(
+        ..., description= "It is the list of the date on which article was updated last time"
+    )
+    article_urls: str = Field(
+        ..., description= "It is the list of the urls of cited articles"
+    )
+
+
+
 class PROMPT_CITATION_FORMAT_SCHEMA(BaseStructuredModel):
     """
     It contains the fields which are going to be the part of the information that llm will be generating in the 
@@ -67,9 +87,9 @@ class PROMPT_CITATION_FORMAT_SCHEMA(BaseStructuredModel):
     context_prompt: str = Field(
         ..., description= "It is the contextual prompt that is the part of the perplexity output"
     )
-    cited_articles: list[str] = Field(
+    cited_articles: list[CITED_ARTICLES_INFO] = Field(
         ..., 
-        description= "It is the list of the articles cited for the answer of the given contextual prompt"
+        description= "It contains the list of datapoints related to the cited articles"
     )
     response_for_prompt: str = Field(
         ...,
@@ -85,4 +105,23 @@ class PROMPT_CITATION_FORMATTER_SCHEMA(BaseStructuredModel):
         ...,
         description= "It contains the list of data points for multiple contextual prompts according to the defined format of PROMPT_CITATION_FORMAT_SCHEMA "
     )
+
+class Prompts_cited_score_Schema(BaseStructuredModel):
+    """
+    It represents the fields like No. of contextual prompts for which user article was cited & list of those contextual prompts
+    """
+    No_of_prompts: int = Field(
+        ..., description= "It is the exact number that shows how many contextual prompts are there that have cited user article"
+    )
+    list_of_prompts_cited_article: list[str] = Field(
+        ..., description= "It is the list of the article "
+    )
+
+
+class GEO_METRICS(BaseStructuredModel):
+    """
+    It represents the output that contains different geo metrics like Prompt_cited_score, Prompts_categories
+    """
+
+    Prompt_cited_score: list[]
 

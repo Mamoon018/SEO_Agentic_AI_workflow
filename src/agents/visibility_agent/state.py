@@ -33,4 +33,5 @@ class visibility_state(MessagesState):
     # list of the articles cited by LLM
     perplexity_response: Annotated[list[str], operator.add]
 
-
+    # structured output of perplexity response
+    prompts_with_citations: list[dict[str,str|list[dict[str,str]]]]

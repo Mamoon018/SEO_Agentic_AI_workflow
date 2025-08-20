@@ -98,11 +98,43 @@ It includes different types of information, the information that is relevant to 
 information of cited articles for that prompt, and perplexity response to the contextual prompt.
 for each context prompt provide the cited articles and response for prompt in the output. 
 Let's suppose we have the 15 prompts then we will have 15 objects that contains context prompts, cited articles, and response for prompt.
+Information about the cited articles include title of artciles, url of articles, date of article, last date article updated.
 
+In case, you do not find information for any required field, or you find that in the perplexity output field is assigned NULL then just put NULL in the value of the particle field in your structured output.
 
-you will be provided with the output which includes different contextual prompts, perplexity response to the contextual prompt information about their respective cited articles.
+you will be provided with the output which includes different contextual prompts, perplexity response to the contextual prompt and information about their respective cited articles.
 Here is the perplexity output:
 {perplexity_response}
 
 """
 
+GEO_METRICS_PROMPT = """
+You are a Search Engine Optimization expert and Generative Engine Optimization expert. You will be provided with 
+the structured output of the perplexity response that contains information about the contextual prompts, details of
+the cited articles for those prompts, and perplexity response for prompts.
+
+Now, using this output we are supposed to calculate different metrics to measure the performance of user article (user_url) in terms of 
+its visibility in AI output (Here Perplexity structured output) that you will be provided.
+
+Below are the given metrics and the way you need to calculate them:
+Metric-1: Prompt_cited_score
+Definition: No of context prompts that has user article cited in their response
+Instructions for calculation of Prompt_cited_score: You should look for exact same url or domain from the user url
+to check if article was cited or not. Give the count of the prompts and list of prompts that include user article in their response. 
+To compile this metric you need to look into context prompt & response for prompt.
+
+Metric-2: Prompts_categories
+Definition: Types of context prompts that have cited the user article. 
+There are different categories of the Prompts as given below
+1) "how-to-guides prompts": User queries like Best practices, Walkthoughs, Troubleshooting etc.
+2) "Solution centric prompts": User queries about casual questions, comparisons, explanations, definitions etc. 
+3) "Opinion seeking prompts": User queries about opinion of AI on different things, brainstoriming, roleplay 
+4) "Evaluation prompts": User queries about reviews info, pros & cons, recommendations, service/product evaluations
+Instructions for calculation of Prompts_categories: Pick those prompts that have cited the user article and analyze them to decide their categories based on provided definitions
+
+Here is the perplexity structured output
+{prompts_with_citations}
+Here is the user article
+{user_url}
+
+"""
