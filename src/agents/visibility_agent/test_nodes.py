@@ -1,20 +1,563 @@
 
+
+from src.agents.visibility_agent.state import visibility_state
+from src.agents.visibility_agent.schemas import EXTRACT_USER_ARTICLE_SCHEMA, ENTITIES_EXTRACTOR_SCHEMA, KEYWORD_SHORTLISTER_SCHEMA, PROMPT_GENERATOR_SCHEMA, PROMPT_CITATION_FORMATTER_SCHEMA, GEO_METRICS_SCHEMA
+from src.agents.visibility_agent.prompts import ENTITIES_EXTRACTOR_PROMPT, PROMPT_GENERATOR_PROMPT, PROMPT_SEARCHER_PROMPT, PROMPTS_CITATION_FORMATTER_PROMPT, GEO_METRICS_PROMPT
 from src.tools.web_extractor_tool import DIFFBOT_TOOL
-from src.utils.settings import settings, get_key
-from src.agents.visibility_agent.temp_data import planner_list2
-from collections import defaultdict
-from itertools import accumulate
+from src.agents.subgraphs.nodes import diffbot_text_extracter
+from src.utils.settings import get_key, settings
+from pydantic import AnyUrl
+from typing import Union, Optional
+from langgraph.graph import StateGraph
+from langgraph.types import Send
+from langgraph.graph import END, START
+import asyncio
+from src.agents.keywords_agent.nodes import GoogleKeywordsAPI
+from src.agents.visibility_agent.temp_data import planner_list1
+
+import json 
 import numpy as np
+from itertools import accumulate
+import dotenv
+import os 
+dotenv.load_dotenv()
+import opik
+opik.configure(use_local=False)
+from opik.integrations.langchain import OpikTracer
+from langchain_core.prompts import PromptTemplate
+from langchain_core.messages import HumanMessage
 
-from langchain_openai import ChatOpenAI
+from src.utils.models_initializer import initialize_model_with_fallbacks , get_openai_model, get_perplexity_llm
 
-# Tools_testing
+# extract_user_article model
+ENTITIES_EXTRACTOR_MODEL_WITH_FALLBACKS= initialize_model_with_fallbacks(
+    primary_model_fn=get_openai_model,
+    primary_model_kwargs={"model_num": 2, "temperature": 0.5},
+    fallback_model_fns=[get_openai_model],
+    fallback_model_kwargs_list=[{"model_num": 1, "temperature": 0.5}],
+    structured_output_schema=ENTITIES_EXTRACTOR_SCHEMA,
+    #bind_tools=True, 
+    #tools=[DIFFBOT_TOOL()],
+    #tool_choice= "Web_scraping_tool"
+)
 
-# model = ChatOpenAI(model="gpt-4.1-mini", api_key= get_key(settings.OPENAI_API_KEY) )
-# model_with_tools = model.bind_tools([DIFFBOT_TOOL()])
+# Prompt generator model
+PROMPT_GENERATOR_MODEL_WITH_FALLBACKS= initialize_model_with_fallbacks(
+    primary_model_fn=get_openai_model,
+    primary_model_kwargs={"model_num": 2, "temperature": 0.5},
+    fallback_model_fns=[get_openai_model],
+    fallback_model_kwargs_list=[{"model_num": 1, "temperature": 0.5}],
+    structured_output_schema=PROMPT_GENERATOR_SCHEMA,
+)
+
+# prompts citations formatter model
+PROMPTS_CITATION_FORMATTER_MODEL_WITH_FALLBACKS= initialize_model_with_fallbacks(
+    primary_model_fn=get_openai_model,
+    primary_model_kwargs={"model_num": 2, "temperature": 0.0},
+    fallback_model_fns=[get_openai_model],
+    fallback_model_kwargs_list=[{"model_num": 2, "temperature": 0.0}],
+    structured_output_schema=PROMPT_CITATION_FORMATTER_SCHEMA,
+)
 
 
-### Keyword Processor Function ###
+# Metrics compilation model
+GEO_METRICS_MODEL_WITH_FALLBACKS= initialize_model_with_fallbacks(
+    primary_model_fn=get_openai_model,
+    primary_model_kwargs={"model_num": 2, "temperature":0.5},
+    fallback_model_fns=[get_openai_model],
+    fallback_model_kwargs_list=[{"model_num":1, "temperature":0.5}],
+    structured_output_schema= GEO_METRICS_SCHEMA
+)
+
+
+
+# lets initialize the class of the google planner so, that we can use its method 
+gkp = GoogleKeywordsAPI()
+
+
+
+                                ####   Nodes of Graph   ####
+
+
+### Labeller that will label the task either as "Article task" or "Brand task"
+async def label_the_task(state:visibility_state):
+    
+    """
+    It reviews the input of the user and assign the "Task label" a value as either "Article task"
+    or "Brand task" so, that we can run the common nodes between Article task & Brand task with input,prompts
+    and output to be stored as per the task type.
+    """
+
+    task_label: str = None
+
+    if state["user_url"] is not None:
+        task_label = "Article task"
+    else: 
+        task_label = "Brand task"
+
+    return {"task_label": task_label}
+
+
+
+async def article_extracter_subgraph_invoker(state:visibility_state):
+    """
+    It is the generic subgraph (independent of the task for the larger task for which it is assisting), that will 
+    be invoked in either case be the router passes query with label of Article task or Brand task. It will be 
+    the part of the both branches. 
+
+    In case where router has labelled the task as "Article task", it takes the user_url as an input and extract the
+    content of the user article.
+
+    **Args:**
+    user_url (str): It is the url of the user article 
+    
+    **Returns:**
+    scrapped_article (Optional[Union[dict[str,str],str]]): It is the text extracted from the article 
+
+    It is the output of the DIFFBOT tool. If article is accessible then we will get scrapped information
+    stored in dictionary as an output. If article is inaccessible then we will get either of two error message specified 
+    in the DIFFBOT tool.
+
+    output_confirmation (bool): It is the confirmation if the text was successfully extracted or not.
+
+    """
+
+    # lets get the input variable 
+    user_url: AnyUrl = state["user_url"]
+
+    # lets initialize the scrapped article 
+    # Let's initialize the scrapped_article object 
+    scrapped_article: Optional[Union[dict[str,str],str]] = {}
+
+    # lets initialize the boolean variable to confirm if output is returned so, that we can proceed with workflow
+    output_confirmation: bool = True 
+
+    # article_extracter_results = text_extracter.ainvoke()     INVOKE SUBGRAPH
+
+    return {
+        "user_url": {},
+        "output_confirmation": False
+    }
+
+
+
+### EXTRACT USER ARTICLE NODE ###
+#async def extract_user_article(state:visibility_state):
+
+    """
+    It takes the user_url as an input variable that will be provided by user to initiate the workflow. This node 
+    simply calls the DIFFBOT Tool to scrap the content from that url. We will get the parsed output of the tool.
+    It will be the dictionary containing fields and values storing article information.
+
+    **Args:**
+    user_url (Anyurl): It is the url of the article which needs to be scrapped. It is provided by the user as input.
+
+    **Returns:**
+    scraping_output: It is the output of the DIFFBOT tool. If article is accessible then we will get scrapped information
+    stored in dictionary as an output. If article is inaccessible then we will get either of two error message specified 
+    in the DIFFBOT tool.
+
+    **Raises:**
+    It raises the error if tool is unable to get initialized or API fails.
+    
+    """
+"""    
+    # let's get the input variable from the state
+    user_url: AnyUrl = state["user_url"]
+
+    # Let's initialize the scrapped_article object 
+    scrapped_article: Optional[Union[dict[str,str],str]] = {}
+
+    # lets initialize the boolean variable to confirm if output is returned so, that we can proceed with workflow
+    output_confirmation: bool = True 
+
+    # lets get the DIFFBOT tool and generate the output of the node
+    try:
+
+        # lets get the instance of the diffbot tool class to access its method 
+        scrapping_tool = DIFFBOT_TOOL()
+        
+        # lets execute the diffbot tool
+        scrapping_output: EXTRACT_USER_ARTICLE_SCHEMA = await scrapping_tool._arun(user_url=user_url)
+
+        # lets define value of output_confirmation based on the output of the tool
+        if scrapping_output in ("Client/Server side error", "Invalid URL"):
+            output_confirmation = False 
+
+        # lets store the output of the tool in the initialized variable
+        scrapped_article: dict[str,str] = scrapping_output
+
+        return {"scrapped_article": scrapped_article,
+                "output_confirmation": output_confirmation}
+
+    except Exception as e:
+        raise RuntimeError(f"error raised due to {e}")
+
+"""
+
+### LLM ENTITIES EXTRACTOR ###
+
+async def entities_extractor(state:visibility_state):
+    """
+    It extracts 1-3 most relevant entities from the text of the scrapped article.
+
+    It will use the 'state["scrapped_article"]' to identify and extract most relevant entities discussed
+    in the article in the context of the entire article. 
+    Those entities will serve as a foundation for generating seed keywords in google keyword planner (GKP).
+
+    **Args:**
+    scrapped_article (dict): It will be used to access title of the article and text of the article.
+
+    **Returns:**
+    Entities (list): It is the list of the relevant entities.
+
+    """
+
+    # lets get the required input variables
+    text_of_article: str = state["scrapped_article"].get("article_text","N/A")
+    title_of_article: str = state["scrapped_article"].get("title","N/A")
+
+    # lets get the prompt of the entities_extractor
+    prompt = PromptTemplate(
+        input_variables= ["text_of_article","title_of_article"],
+        template= ENTITIES_EXTRACTOR_PROMPT
+    )
+
+    entities_prompt = prompt.format(text_of_article= text_of_article, title_of_article=title_of_article)
+
+    # lets initialize the object to store the entities as a result of the node
+    entities: list[str] = []
+
+    # lets get the result of the LLM 
+    entities_extractor_response: ENTITIES_EXTRACTOR_SCHEMA = await ENTITIES_EXTRACTOR_MODEL_WITH_FALLBACKS.ainvoke(
+        input= [HumanMessage(content=entities_prompt)]
+    )
+
+    # lets store the output of the LLM in the entities object
+    entities: list[str] = entities_extractor_response.entities
+
+    # lets update the state with addition of entities in it
+    return {
+        "entities": entities
+    }
+
+
+### Prompts generator subgraph
+async def article_prompts_generator_subgraph_invoker(state:visibility_state):
+    """
+    It takes the entities extracted as an input and invokes the subgraph which contains three nodes 
+    gkp caller, keyword shortlister and prompt generator. 
+
+    It is the generic subgraph that we are going to invoke for the article.
+
+    **Args:**
+    entities (list[str]): It is the list of the entities that are extracted by the entities extracter from the 
+    user article.
+
+    **Returns:**
+    contextual_prompts (list[str]): It returns the contextual prompts that are generated by the last node of the 
+    subgraph
+    
+    """
+
+    # lets initialize the input variable
+    entities: list[str] = state["entities"]
+
+    contextual_prompts = []
+
+    return {
+        "contextual_prompts": contextual_prompts
+    }
+
+
+
+
+
+
+
+
+
+
+### GKP CALLER - 1 NODE ###
+
+async def gkp_caller1(state:visibility_state):
+    """
+    It feeds all extracted entities to google keyword planner as seed keywords and in return google keyword planner
+    provides us relevant primary and secondary keywords along with their metrics and it also uses user_url as input along
+    with extracted entities.
+
+    **Args:**
+    entities (list): It is the list of extracted entities from the article. It will be used as seed keywords in Google Keyword Planner.
+    user_url (Anyurl): It is the url of an article provided by user.
+
+    **Returns:**
+    gkp_planner_list1: It is the list of the keywords of google planner
+    
+    """
+
+    # let's get the input variables
+    user_url: AnyUrl = state["user_url"]
+    entities: list[str] = state["entities"]
+
+
+    try:
+        # lets initialize the object that will store the gkp_planner_list1
+        #gkp_planner_list1: GKP_CALLER1 = await gkp.generate_keywords(keywords=entities,url=user_url)
+
+        # For now, we will use dummy results of the gkp.generate_keywords
+        gkp_planner_list1: list[dict[str, str | int | dict[str,int]]] = planner_list1
+
+
+        return {
+            "gkp_planner_list1": gkp_planner_list1
+        }
+
+    except Exception as e:
+        raise RuntimeError(f"error occured in gkp_caller due to {e}") from e
+
+
+
+### Keyword Processor Node ###
+
+async def keyword_shortlister(state:visibility_state):
+    """
+    It takes the keywords from the gkp_planner_list1 and based on the criteria to shortlist the top keywords only, it
+    generates the list in the output that contains only keywords with higher proportion of share in the total combined
+    search volume of all keywords.
+    
+    """
+
+    # lets get the input variable
+    gkp_planner_list1: list[dict[str, str | int | dict[str,int]]] = state["gkp_planner_list1"]
+
+    # lets initialize the shortlisted keywords
+    shortlisted_keywords: list[str] = []
+
+    try:
+        # lets get the keywords 
+        shortlisted_keywords_response: KEYWORD_SHORTLISTER_SCHEMA = keyword_processor(gkp_planner_list1)
+
+        # lets store the output of the node in the initialized variable
+
+        shortlisted_keywords = shortlisted_keywords_response
+
+        return {
+            "shortlisted_keywords": shortlisted_keywords
+        }
+
+    except Exception as e:
+        raise RuntimeError(f"Error occurred keyword shortlister node in {e}") from e 
+
+
+
+### Prompts Generator Node ###
+
+async def prompt_generator(state:visibility_state):
+    """
+    It takes the shortlisted keywords based as an input - and generate 5-10 contextual prompts using those keywords.
+    These contextual prompts are based on the user-intent that we catch from the keyword searches on web. 
+
+    1) What is contextual prompt? It is the prompt about the article topic with context which user would searching on LLMs.
+    We kept it contextual because users like to provide some context in their prompts in order to be more specific & precise while asking their queries to LLMs.
+    2) How are we generating contextual prompt? 
+        (a) What are possible contexts under which users are searching prompts?
+        That depends on the intent of user search. If users are looking for information about EV - then prompts will be information extraction based.
+        Different intent buckets to cover possible user contexts about any topic:
+        1) Informational: Benefits of EV?, Consequences of EV?, new updates in EV?, upcoming possibilities in EV?   
+        2) Navigational: How to guide charge EV?
+        3) Transactional: Buyers look for EV? highest sales of EV ?
+        4) Comparative: reviews, top, best, EV vs non-EV which got more speed?
+        These are the possible intent that can drive the different contexts in the user prompts. 
+            
+            -- We have one topic of article underconsideration --
+        (b) Identify the intent of the article - Is it Informational, Navigational, Transactional, Comparative? (How user would ideally want
+        to search to get article's information?)
+        (c) We have the entities of article - about which user intents to search. (What user can search (entities user possibly interested in) 
+        about the article?)
+        (d) GKP-Keywords help us identifying the "intent of the users on web" & "entities they are interested in"
+        (e) Now, we know user's interests & intent about topic on web - we know what interests & intent of user our article addresses.
+        (f) Questions based on the intent & interests of the user about topic, under the context in which article is addressing that intent & 
+        interest - prompts will be based!
+        (g) LLM needs to think about this whole scenario for broader context - we are only providing a direction.
+
+        For Example: 
+        Topic: Study in Germany for Pakistani students?
+        Entities in article: german universities, free education in germany, top german universities, pakistani students
+        gkp-keywords: fee in germany, german universities, scholarhips in germany, jobs in germany
+
+        Search Intent of users: fee in germany, scholarship in germany, jobs in germany (Informational) 
+        Entities users interested in: fee, universities, scholarship, jobs
+        inferring context from above two data-points: Interested in expense of students, subsidies for students, career oppotunities in germany
+
+        prompts: 
+        Option-1: Prompts totally based on user intent & interested entities (Are german universities free?)
+        Option-2: Prompts based on user intent & interested entites & in the context article addresses those intents & interests.
+        suppose article has covered public-privdate universities fees comparison.
+        (What is the difference in the expense of students studying in private universities as compare to studying in public universities?)
+    
+        Return no more than 2 prompts in total.
+    """
+
+    # lets get the input variables from state
+    article_text: str = state["scrapped_article"].get("article_text","N/A")
+    article_title: str = state["scrapped_article"].get("title","N/A")
+    entities: list[str] = state["entities"]
+    shortlisted_keywords: list[str] = state["shortlisted_keywords"]
+
+    # lets get the prompt of the node
+    prompt = PromptTemplate(input_variables= ["article_text", "article_title", "entities", "shortlisted_keywords"],
+                            template=PROMPT_GENERATOR_PROMPT)
+    
+    keyword_generator_prompt = prompt.format(article_text=article_text,article_title=article_title,
+                                            entities=entities, shortlisted_keywords=shortlisted_keywords)
+    
+    # lets initialize the list to store prompts
+    contextual_prompts: list[str] = []
+
+    try:
+
+        prompt_generator_response: PROMPT_GENERATOR_SCHEMA = await PROMPT_GENERATOR_MODEL_WITH_FALLBACKS.ainvoke(
+            input= [HumanMessage(content=keyword_generator_prompt)]
+        )
+
+        contextual_prompts = prompt_generator_response.contextual_prompts
+
+        return {
+            "contextual_prompts": contextual_prompts
+        }
+
+    except Exception as e:
+        raise RuntimeError(f"error raised in prompt_generator node due to {e}") from e
+
+
+
+# lets use the perplexity model to get the search results
+async def perplexity_citations_for_prompts(state:visibility_state):
+    """
+    It takes the generated contextual prompts as an input and generate the responses for it to simulate the user
+    searches and then check which articles are appearing in the response. 
+    
+    """
+
+    # lets get the input variables
+    contextual_prompts: str = state["contextual_prompts"]
+
+    # lets get the prompt of the node
+    prompt = PromptTemplate(input_variables= "contextual_prompts", template=PROMPT_SEARCHER_PROMPT)
+    perplexity_citations_for_prompts_prompt = prompt.format(contextual_prompts=contextual_prompts)
+
+    # lets initialize the object to store the output of the node
+    perplexity_response: list[str] = []
+    
+    # lets get the llm
+    #citation_results = await get_perplexity_llm(1,prompt=perplexity_citations_for_prompts_prompt)
+
+    
+    # lets get the result and store it
+    #perplexity_response = [citation_results]
+    
+
+    return {
+        "perplexity_response": perplexity_response
+    }
+
+    # Lets use the LangGraph SEND API that will be use defined llm node for all the prompts in parallelization style
+async def continue_perplexity_citations_for_prompts(state:visibility_state):
+    return  [Send("perplexity_citations_for_prompts",{"contextual_prompts": cp}) for cp in state["contextual_prompts"]]
+    # Here send will take each contextual prompt and pass it to the target node specified as param. It will pass 
+    # all prompts parallely. 
+
+
+# lets get the reducer node ---> We  need to parse the results of the "perplexity_response" here.
+async def prompts_citation_reducer(state:visibility_state):
+    
+    """
+    This node takes the perplexity output as an input and extracts the information about cited articles, 
+    perplexity answer for contextual prompt, and contextual prompt itself.
+
+    **Args:**
+    perplexity_response (str): It is the raw output of the perplexity for all contextual prompts
+
+    **Returns:**
+    prompts_with_citations (dict[dict]): It returns the clean information of the required fields in json format 
+    
+    """
+
+    # lets get the required input variable 
+    perplexity_response: str = state["perplexity_response"]
+
+    # lets get the prompt 
+    prompt = PromptTemplate(input_variables="perplexity_response", template= PROMPTS_CITATION_FORMATTER_PROMPT)
+    prompts_citation_formatter_prompt = prompt.format(perplexity_response=perplexity_response)
+
+    # lets initialize the object to store the output of llm
+    prompts_with_citations  = []
+
+    # lets invoke the llm 
+    #formatter_response: PROMPT_CITATION_FORMATTER_SCHEMA = await PROMPTS_CITATION_FORMATTER_MODEL_WITH_FALLBACKS.ainvoke(
+    #    [HumanMessage(content=prompts_citation_formatter_prompt)]
+    #)
+
+    #prompts_with_citations = formatter_response.prompts_with_citations
+
+    return {
+            "prompts_with_citations": prompts_with_citations
+            }
+
+
+
+## Node for Metrics ##
+
+async def geo_article_metrics(state:visibility_state):
+    """
+    This node takes the structured output of perplexity response for each prompt as an input, and uses it 
+    to calculate the different metrics and then give structured output for those metrics.
+
+    **Args:**
+    prompts_with_citations (list): It is the list of the datapoints that contains information about the perplexity output in structured way
+
+    **Returns:**
+    It return output containing list of different metrics
+    
+    """
+
+    # lets get the input variable from state
+    prompts_with_citations = state["prompts_with_citations"]
+    user_url = state["user_url"]
+    scrapped_article = state["scrapped_article"].get("article_text",[])
+
+    # lets get the prompt 
+    prompt = PromptTemplate(input_variables= ["prompts_with_citations", "user_url", "scrapped_article"], template= GEO_METRICS_PROMPT)
+    geo_metrics_prompt = prompt.format(prompts_with_citations= prompts_with_citations, user_url = user_url, scrapped_article = scrapped_article)
+
+    # lets initialize the input variable to store the metrics
+    geo_metrics_cal = {}
+
+    # lets invoke the LLM to get the metrics
+    #geo_metrics_response: GEO_METRICS_SCHEMA = await GEO_METRICS_MODEL_WITH_FALLBACKS.ainvoke(
+    #    [HumanMessage(content=geo_metrics_prompt)]
+    #)
+
+    #geo_metrics_cal = geo_metrics_response
+
+    return geo_metrics_cal
+
+
+
+
+
+                ####  BRAND METRICS  ####
+
+
+
+
+
+
+
+
+
+
+### GET THE TOP KEYWORDS FROM THE ### 
 
 def keyword_processor(mainkeyword_list):
 
@@ -81,15 +624,84 @@ def keyword_processor(mainkeyword_list):
     return shortlisted_keywords
 
 
+### ROUTER TO CHECK IF WORKFLOW GOT TEXT TO PROCEED OR NOT ###
+
+def extract_user_article_router(state: visibility_state):
+    if state["output_confirmation"]:
+        return "text_extracted"
+    else:
+        return "text_not_extracted"
 
 
-    
+### ROUTER TO CHECK IF THE WORKFLOW IS GOING TO PERFORM ARTICLE TASK OR BRAND TASK
+
+def check_the_task(state:visibility_state):
+    if state["task_label"] == "Article task":
+        return "Article task"
+    if state["task_label"] == "Brand task":
+        return "Brand task"
+
+   ######      Let's Build the Graph      ######
+
+
+builder = StateGraph(state_schema=visibility_state)
+
+builder.add_node(node="label_the_task", action=label_the_task)
+#builder.add_node(node="extract_user_article",action=extract_user_article)
+builder.add_node(node="article_extracter_subgraph_invoker", action=article_extracter_subgraph_invoker)
+builder.add_node(node="entities_extractor", action= entities_extractor)
+builder.add_node(node="article_prompts_generator_subgraph_invoker", action=article_prompts_generator_subgraph_invoker)
+#builder.add_node(node="gkp_caller1", action=gkp_caller1)
+#builder.add_node(node="keyword_shortlister", action=keyword_shortlister)
+#builder.add_node(node="prompt_generator", action=prompt_generator)
+builder.add_node(node="perplexity_citations_for_prompts", action=perplexity_citations_for_prompts)
+builder.add_node(node="prompts_citation_reducer", action=prompts_citation_reducer)
+builder.add_node(node="geo_article_metrics", action=geo_article_metrics)
+
+builder.add_edge(START,"label_the_task")
+builder.add_conditional_edges(source="label_the_task",
+                              path=check_the_task,
+                              path_map= {"Article task": "article_extracter_subgraph_invoker",
+                              "Brand task": END}
+                              )
+
+builder.add_conditional_edges(
+    source= "article_extracter_subgraph_invoker",
+    path= extract_user_article_router,
+    path_map= {
+        "text_extracted":"entities_extractor",
+        "text_not_extracted":END
+    }
+)
+"""
+builder.add_edge("entities_extractor","gkp_caller1")
+builder.add_edge("gkp_caller1", "keyword_shortlister")
+builder.add_edge("keyword_shortlister","prompt_generator")
+"""
+builder.add_edge("entities_extractor","article_prompts_generator_subgraph_invoker")
+builder.add_conditional_edges(
+    "article_prompts_generator_subgraph_invoker",
+    continue_perplexity_citations_for_prompts,
+    ["perplexity_citations_for_prompts"]
+)
+builder.add_edge("perplexity_citations_for_prompts","prompts_citation_reducer")
+builder.add_edge("prompts_citation_reducer", "geo_article_metrics")
+builder.add_edge("geo_article_metrics", END)
+
+
+workflow = builder.compile()
+
+
+# Lets call the graph with Opik 
+opik_project_name = get_key(settings.OPIK_PROJECT_NAME)
+#opik_key = get_key(settings.OPIK_API_KEY)
+#opik_workspace = get_key(settings.OPIK_WORKSPACE)
+os.getenv("OPIK_API_KEY")
+
+
+tracer = OpikTracer(graph=workflow.get_graph(xray=True),project_name= opik_project_name)
+inputs = {"user_url": "https://langchain-ai.github.io/langgraph/how-tos/tool-calling/"}
+result = asyncio.run(workflow.ainvoke(inputs,config={"callbacks": [tracer]}))
 
 
 
-
-if __name__ == "__main__":
-
-    results =  keyword_processor(mainkeyword_list=planner_list2)
-
-    print(results)

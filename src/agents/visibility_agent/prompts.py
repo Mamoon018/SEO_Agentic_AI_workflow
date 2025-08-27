@@ -64,6 +64,8 @@ PROMPT_GENERATOR_PROMPT = """
         Reason why this prompt aligns with web-based datapoint we have: XYZ
         [Prompt1, Reason_of_prompt1, etc]
 
+        Return no more than 2 prompts in total.
+
 Here is the entities of the article:
 {entities}
 Here is the text of the article:
@@ -118,7 +120,7 @@ its visibility in AI output (Here Perplexity structured output) that you will be
 
 Below are the given metrics and the way you need to calculate them:
 Metric-1: Prompt_cited_score
-Definition: No of context prompts that has user article cited in their response
+Definition: No of context prompts that has cited the user domain or URL in their response
 Instructions for calculation of Prompt_cited_score: You should look for exact same url or domain from the user url
 to check if article was cited or not. Give the count of the prompts and list of prompts that include user article in their response. 
 To compile this metric you need to look into context prompt & response for prompt.
@@ -132,9 +134,31 @@ There are different categories of the Prompts as given below
 4) "Evaluation prompts": User queries about reviews info, pros & cons, recommendations, service/product evaluations
 Instructions for calculation of Prompts_categories: Pick those prompts that have cited the user article and analyze them to decide their categories based on provided definitions
 
+Metric-3: citation_rank
+Definition: It is the rank at which user article is placed in the citations
+Instructions for calculation of citation_rank: Pick those prompts that have cited the user article and go through its objects that contains details of the cited articles,
+and in the provided order of the cited articles check rank of the object that contains the user article details. If first object contains that it means rank for that prompt is 1. In this way
+you will check the rank of user article for contextual prompts that have cited it, and then determine what is the highest rank and lowest rank with their respective contextual prompts out of all the contextual prompt that have cited it
+1 is the highest rank.
+
+Metric-4: missed_content_details
+Definition: It refers to the core topics, ideas, key concepts, or area of focus addressing a particular aspect that is core of llm response for a 
+given prompt but are absent in the scrapped article of user. It is the core idea for llm response that scrapped article did not include in its 
+content. so, it is missed content. You should give missed content only for those prompts that have not cited user domain or URL.
+Instruction for calculation of missed_content_details:
+1) Review the LLM response for the given prompt and extract its main relevant core topics, ideas, key concepts, or area of focus.
+2) Compare these against the user article.
+3) Identify which core topics, ideas, key concepts, or area of focus are missing in the scrapped article.
+4) Return missed content as keywords only (0 to 3 items,). If nothing is missing, return 0.
+
+Make sure you provide content missed details for each prompt that have cited article separately. Make sure you give clean output and plain text for all fields and no json lines should be included in output.
+
+
 Here is the perplexity structured output
 {prompts_with_citations}
 Here is the user article
 {user_url}
+Here is the scrapped_article of user
+{scrapped_article}
 
 """

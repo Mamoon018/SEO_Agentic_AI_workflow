@@ -1,7 +1,7 @@
 
 
 from src.agents.visibility_agent.state import visibility_state
-from src.agents.visibility_agent.schemas import EXTRACT_USER_ARTICLE_SCHEMA, ENTITIES_EXTRACTOR_SCHEMA, KEYWORD_SHORTLISTER_SCHEMA, PROMPT_GENERATOR_SCHEMA, PROMPT_CITATION_FORMATTER_SCHEMA
+from src.agents.visibility_agent.schemas import EXTRACT_USER_ARTICLE_SCHEMA, ENTITIES_EXTRACTOR_SCHEMA, KEYWORD_SHORTLISTER_SCHEMA, PROMPT_GENERATOR_SCHEMA, PROMPT_CITATION_FORMATTER_SCHEMA, GEO_METRICS_SCHEMA
 from src.agents.visibility_agent.prompts import ENTITIES_EXTRACTOR_PROMPT, PROMPT_GENERATOR_PROMPT, PROMPT_SEARCHER_PROMPT, PROMPTS_CITATION_FORMATTER_PROMPT, GEO_METRICS_PROMPT
 from src.tools.web_extractor_tool import DIFFBOT_TOOL
 from src.utils.settings import get_key, settings
@@ -30,9 +30,9 @@ from src.utils.models_initializer import initialize_model_with_fallbacks, get_mi
 
 # extract_user_article model
 ENTITIES_EXTRACTOR_MODEL_WITH_FALLBACKS= initialize_model_with_fallbacks(
-    primary_model_fn=get_mistral_model,
+    primary_model_fn=get_openai_model,
     primary_model_kwargs={"model_num": 2, "temperature": 0.5},
-    fallback_model_fns=[get_mistral_model],
+    fallback_model_fns=[get_openai_model],
     fallback_model_kwargs_list=[{"model_num": 1, "temperature": 0.5}],
     structured_output_schema=ENTITIES_EXTRACTOR_SCHEMA,
     #bind_tools=True, 
@@ -42,9 +42,9 @@ ENTITIES_EXTRACTOR_MODEL_WITH_FALLBACKS= initialize_model_with_fallbacks(
 
 # Prompt generator model
 PROMPT_GENERATOR_MODEL_WITH_FALLBACKS= initialize_model_with_fallbacks(
-    primary_model_fn=get_mistral_model,
+    primary_model_fn=get_openai_model,
     primary_model_kwargs={"model_num": 2, "temperature": 0.5},
-    fallback_model_fns=[get_mistral_model],
+    fallback_model_fns=[get_openai_model],
     fallback_model_kwargs_list=[{"model_num": 1, "temperature": 0.5}],
     structured_output_schema=PROMPT_GENERATOR_SCHEMA,
 )
@@ -59,6 +59,16 @@ PROMPTS_CITATION_FORMATTER_MODEL_WITH_FALLBACKS= initialize_model_with_fallbacks
 )
 
 
+# Metrics compilation model
+GEO_METRICS_MODEL_WITH_FALLBACKS= initialize_model_with_fallbacks(
+    primary_model_fn=get_openai_model,
+    primary_model_kwargs={"model_num": 2, "temperature":0.5},
+    fallback_model_fns=[get_openai_model],
+    fallback_model_kwargs_list=[{"model_num":1, "temperature":0.5}],
+    structured_output_schema= GEO_METRICS_SCHEMA
+)
+
+
 
 # lets initialize the class of the google planner so, that we can use its method 
 gkp = GoogleKeywordsAPI()
@@ -66,6 +76,23 @@ gkp = GoogleKeywordsAPI()
 
 
                                 ####   Nodes of Graph   ####
+
+
+### Labeller that will label the task either as "Article task" or "Brand task"
+async def label_the_task(state:visibility_state):
+    
+    """
+    It reviews the input of the user and assign the "Task label" a value as either "Article task"
+    or "Brand task" so, that we can run the common nodes between Article task & Brand task with input,prompts
+    and output to be stored as per the task type.
+    """
+
+    
+
+
+
+
+
 
 
 ### EXTRACT USER ARTICLE NODE ###
@@ -286,6 +313,7 @@ async def prompt_generator(state:visibility_state):
         suppose article has covered public-privdate universities fees comparison.
         (What is the difference in the expense of students studying in private universities as compare to studying in public universities?)
     
+        Return no more than 2 prompts in total.
     """
 
     # lets get the input variables from state
@@ -398,7 +426,7 @@ async def prompts_citation_reducer(state:visibility_state):
 
 ## Node for Metrics ##
 
-async def geo_metrics(state:visibility_state):
+async def geo_article_metrics(state:visibility_state):
     """
     This node takes the structured output of perplexity response for each prompt as an input, and uses it 
     to calculate the different metrics and then give structured output for those metrics.
@@ -414,18 +442,27 @@ async def geo_metrics(state:visibility_state):
     # lets get the input variable from state
     prompts_with_citations = state["prompts_with_citations"]
     user_url = state["user_url"]
+    scrapped_article = state["scrapped_article"].get("article_text",[])
 
     # lets get the prompt 
-    prompt = PromptTemplate(input_variables= "prompts_with_citations", template= GEO_METRICS_PROMPT)
-    GEO_PROMPT = prompt.format(prompts_with_citations= prompts_with_citations)
+    prompt = PromptTemplate(input_variables= ["prompts_with_citations", "user_url", "scrapped_article"], template= GEO_METRICS_PROMPT)
+    geo_metrics_prompt = prompt.format(prompts_with_citations= prompts_with_citations, user_url = user_url, scrapped_article = scrapped_article)
 
     # lets initialize the input variable to store the metrics
-    geo_metrics = []
+    geo_metrics_cal = []
 
     # lets invoke the LLM to get the metrics
+    geo_metrics_response: GEO_METRICS_SCHEMA = await GEO_METRICS_MODEL_WITH_FALLBACKS.ainvoke(
+        [HumanMessage(content=geo_metrics_prompt)]
+    )
+
+    geo_metrics_cal = geo_metrics_response
+
+    return geo_metrics_cal
 
 
 
+                ####  BRAND METRICS  ####
 
 
 
@@ -524,6 +561,7 @@ builder.add_node(node="keyword_shortlister", action=keyword_shortlister)
 builder.add_node(node="prompt_generator", action=prompt_generator)
 builder.add_node(node="perplexity_citations_for_prompts", action=perplexity_citations_for_prompts)
 builder.add_node(node="prompts_citation_reducer", action=prompts_citation_reducer)
+builder.add_node(node="geo_article_metrics", action=geo_article_metrics)
 
 builder.add_edge(START, "extract_user_article")
 builder.add_conditional_edges(
@@ -543,7 +581,8 @@ builder.add_conditional_edges(
     ["perplexity_citations_for_prompts"]
 )
 builder.add_edge("perplexity_citations_for_prompts","prompts_citation_reducer")
-builder.add_edge("prompts_citation_reducer", END)
+builder.add_edge("prompts_citation_reducer", "geo_article_metrics")
+builder.add_edge("geo_article_metrics", END)
 
 
 workflow = builder.compile()
@@ -557,7 +596,7 @@ os.getenv("OPIK_API_KEY")
 
 
 tracer = OpikTracer(graph=workflow.get_graph(xray=True),project_name= opik_project_name)
-inputs = {"user_url": "https://medium.com/@vivekvjnk/introduction-to-tool-use-with-langgraphs-toolnode-0121f3c8c323"}
+inputs = {"user_url": "https://langchain-ai.github.io/langgraph/how-tos/tool-calling/"}
 result = asyncio.run(workflow.ainvoke(inputs,config={"callbacks": [tracer]}))
 
 

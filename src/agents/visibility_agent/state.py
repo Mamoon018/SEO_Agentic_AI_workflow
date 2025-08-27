@@ -9,14 +9,25 @@ import operator
 
 class visibility_state(MessagesState):
 
-    # Input url of the user
-    user_url: AnyUrl
-    
+                                #### Main workflow state ####
+    # label the workflow
+    task_label: str
+
+
+                                #### Generic Subgraphs ####
+
     # Output of the extract_user_article node. It contains the information about the user article (either scrapped data or error message)
-    scrapped_article: Optional[Union[dict[str,str],str]]
+    scrapped_article: Optional[Union[dict[str,str],str]]    
 
     # bool for tool execution confirmation
     output_confirmation : bool
+    
+
+
+
+                                    #### Article task state variables ####
+    # Input url of the user
+    user_url: AnyUrl | None
 
     # list of entities extracted from the article
     entities: list[str]
@@ -35,3 +46,15 @@ class visibility_state(MessagesState):
 
     # structured output of perplexity response
     prompts_with_citations: list[dict[str,str|list[dict[str,str]]]]
+    
+
+                                    #### Brand Task related state variables ####
+
+    # Brand name
+    brand_name: str | None
+
+    # brand domain 
+    brand_domain: AnyUrl | None 
+
+    # brand query related keywords
+    brand_related_keywords: list[str] | None 
