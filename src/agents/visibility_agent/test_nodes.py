@@ -4,7 +4,7 @@ from src.agents.visibility_agent.state import visibility_state
 from src.agents.visibility_agent.schemas import EXTRACT_USER_ARTICLE_SCHEMA, ENTITIES_EXTRACTOR_SCHEMA, KEYWORD_SHORTLISTER_SCHEMA, PROMPT_GENERATOR_SCHEMA, PROMPT_CITATION_FORMATTER_SCHEMA, GEO_METRICS_SCHEMA
 from src.agents.visibility_agent.prompts import ENTITIES_EXTRACTOR_PROMPT, PROMPT_GENERATOR_PROMPT, PROMPT_SEARCHER_PROMPT, PROMPTS_CITATION_FORMATTER_PROMPT, GEO_METRICS_PROMPT
 from src.tools.web_extractor_tool import DIFFBOT_TOOL
-from src.agents.subgraphs.nodes import diffbot_text_extracter
+from src.agents.subgraphs.edges import text_extracter_workflow, prompt_generator_builder_workflow
 from src.utils.settings import get_key, settings
 from pydantic import AnyUrl
 from typing import Union, Optional
@@ -79,7 +79,7 @@ gkp = GoogleKeywordsAPI()
                                 ####   Nodes of Graph   ####
 
 
-### Labeller that will label the task either as "Article task" or "Brand task"
+### Label the task Node ###
 async def label_the_task(state:visibility_state):
     
     """
@@ -98,7 +98,7 @@ async def label_the_task(state:visibility_state):
     return {"task_label": task_label}
 
 
-
+### Article extracter subgraph invoker ###
 async def article_extracter_subgraph_invoker(state:visibility_state):
     """
     It is the generic subgraph (independent of the task for the larger task for which it is assisting), that will 
@@ -132,12 +132,16 @@ async def article_extracter_subgraph_invoker(state:visibility_state):
     # lets initialize the boolean variable to confirm if output is returned so, that we can proceed with workflow
     output_confirmation: bool = True 
 
-    # article_extracter_results = text_extracter.ainvoke()     INVOKE SUBGRAPH
+    article_extracter_results = await text_extracter_workflow.ainvoke(input={"user_url": user_url})
+    scrapped_article = article_extracter_results["scrapped_article"]
+    output_confirmation = article_extracter_results["output_confirmation"]
+    
 
     return {
-        "user_url": {},
-        "output_confirmation": False
+        "scrapped_article": scrapped_article,
+        "output_confirmation": output_confirmation
     }
+
 
 
 
@@ -242,11 +246,11 @@ async def entities_extractor(state:visibility_state):
     }
 
 
-### Prompts generator subgraph
-async def article_prompts_generator_subgraph_invoker(state:visibility_state):
+### Prompts generator subgraph invoker 
+async def article_keyword_shortlister_subgraph_invoker(state:visibility_state):
     """
     It takes the entities extracted as an input and invokes the subgraph which contains three nodes 
-    gkp caller, keyword shortlister and prompt generator. 
+    gkp caller, keyword shortlister. 
 
     It is the generic subgraph that we are going to invoke for the article.
 
@@ -261,12 +265,19 @@ async def article_prompts_generator_subgraph_invoker(state:visibility_state):
     """
 
     # lets initialize the input variable
+    user_url: AnyUrl = state["user_url"]
     entities: list[str] = state["entities"]
 
-    contextual_prompts = []
+    # lets initialize the keywords shortlisted list
+    shortlisted_keywords: list[str] = []
+
+    # lets invoke the article prompt generator subgraph
+    keywords_shortlisted: KEYWORD_SHORTLISTER_SCHEMA = await prompt_generator_builder_workflow.ainvoke(input={"user_url":user_url,"entities":entities})
+
+    shortlisted_keywords = keywords_shortlisted["shortlisted_keywords"]
 
     return {
-        "contextual_prompts": contextual_prompts
+        "shortlisted_keywords": shortlisted_keywords
     }
 
 
@@ -281,6 +292,7 @@ async def article_prompts_generator_subgraph_invoker(state:visibility_state):
 ### GKP CALLER - 1 NODE ###
 
 async def gkp_caller1(state:visibility_state):
+
     """
     It feeds all extracted entities to google keyword planner as seed keywords and in return google keyword planner
     provides us relevant primary and secondary keywords along with their metrics and it also uses user_url as input along
@@ -293,7 +305,6 @@ async def gkp_caller1(state:visibility_state):
     **Returns:**
     gkp_planner_list1: It is the list of the keywords of google planner
     
-    """
 
     # let's get the input variables
     user_url: AnyUrl = state["user_url"]
@@ -315,7 +326,7 @@ async def gkp_caller1(state:visibility_state):
     except Exception as e:
         raise RuntimeError(f"error occured in gkp_caller due to {e}") from e
 
-
+    """
 
 ### Keyword Processor Node ###
 
@@ -325,7 +336,6 @@ async def keyword_shortlister(state:visibility_state):
     generates the list in the output that contains only keywords with higher proportion of share in the total combined
     search volume of all keywords.
     
-    """
 
     # lets get the input variable
     gkp_planner_list1: list[dict[str, str | int | dict[str,int]]] = state["gkp_planner_list1"]
@@ -348,7 +358,7 @@ async def keyword_shortlister(state:visibility_state):
     except Exception as e:
         raise RuntimeError(f"Error occurred keyword shortlister node in {e}") from e 
 
-
+    """
 
 ### Prompts Generator Node ###
 
@@ -650,13 +660,14 @@ builder.add_node(node="label_the_task", action=label_the_task)
 #builder.add_node(node="extract_user_article",action=extract_user_article)
 builder.add_node(node="article_extracter_subgraph_invoker", action=article_extracter_subgraph_invoker)
 builder.add_node(node="entities_extractor", action= entities_extractor)
-builder.add_node(node="article_prompts_generator_subgraph_invoker", action=article_prompts_generator_subgraph_invoker)
 #builder.add_node(node="gkp_caller1", action=gkp_caller1)
 #builder.add_node(node="keyword_shortlister", action=keyword_shortlister)
-#builder.add_node(node="prompt_generator", action=prompt_generator)
-builder.add_node(node="perplexity_citations_for_prompts", action=perplexity_citations_for_prompts)
-builder.add_node(node="prompts_citation_reducer", action=prompts_citation_reducer)
-builder.add_node(node="geo_article_metrics", action=geo_article_metrics)
+builder.add_node(node="article_keyword_shortlister_subgraph_invoker", action=article_keyword_shortlister_subgraph_invoker)
+builder.add_node(node="prompt_generator", action=prompt_generator)
+#builder.add_node(node="perplexity_citations_for_prompts", action=perplexity_citations_for_prompts)
+#builder.add_node(node="prompts_citation_reducer", action=prompts_citation_reducer)
+#builder.add_node(node="geo_article_metrics", action=geo_article_metrics)
+
 
 builder.add_edge(START,"label_the_task")
 builder.add_conditional_edges(source="label_the_task",
@@ -678,15 +689,17 @@ builder.add_edge("entities_extractor","gkp_caller1")
 builder.add_edge("gkp_caller1", "keyword_shortlister")
 builder.add_edge("keyword_shortlister","prompt_generator")
 """
-builder.add_edge("entities_extractor","article_prompts_generator_subgraph_invoker")
-builder.add_conditional_edges(
-    "article_prompts_generator_subgraph_invoker",
-    continue_perplexity_citations_for_prompts,
-    ["perplexity_citations_for_prompts"]
-)
-builder.add_edge("perplexity_citations_for_prompts","prompts_citation_reducer")
-builder.add_edge("prompts_citation_reducer", "geo_article_metrics")
-builder.add_edge("geo_article_metrics", END)
+builder.add_edge("entities_extractor","article_keyword_shortlister_subgraph_invoker")
+
+
+#builder.add_conditional_edges(    "article_prompts_generator_subgraph_invoker",continue_perplexity_citations_for_prompts,["perplexity_citations_for_prompts"])
+
+builder.add_edge("article_keyword_shortlister_subgraph_invoker","prompt_generator")
+builder.add_edge("prompt_generator",END)
+
+#builder.add_edge("perplexity_citations_for_prompts","prompts_citation_reducer")
+#builder.add_edge("prompts_citation_reducer", "geo_article_metrics")
+#builder.add_edge("geo_article_metrics", END)
 
 
 workflow = builder.compile()
