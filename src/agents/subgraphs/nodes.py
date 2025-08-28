@@ -36,7 +36,7 @@ async def diffbot_text_extracter(state:text_extracter_state):
     user_url: AnyUrl = state["user_url"]
 
     # Let's initialize the scrapped_article object 
-    scrapped_article: Optional[Union[dict[str,str],str]] = {}
+    scrapped_text: Optional[Union[dict[str,str],str]] = {}
 
     # lets initialize the boolean variable to confirm if output is returned so, that we can proceed with workflow
     output_confirmation: bool = True 
@@ -55,9 +55,9 @@ async def diffbot_text_extracter(state:text_extracter_state):
             output_confirmation = False 
 
         # lets store the output of the tool in the initialized variable
-        scrapped_article: dict[str,str] = scrapping_output
+        scrapped_text: dict[str,str] = scrapping_output
 
-        return {"scrapped_article": scrapped_article,
+        return {"scrapped_text": scrapped_text,
                 "output_confirmation": output_confirmation}
 
     except Exception as e:

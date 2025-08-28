@@ -17,7 +17,7 @@ class visibility_state(MessagesState):
                                 #### Generic Subgraphs ####
 
     # Output of the extract_user_article node. It contains the information about the user article (either scrapped data or error message)
-    scrapped_article: Optional[Union[dict[str,str],str]]    
+    scrapped_text: Optional[Union[dict[str,str],str]]    
 
     # bool for tool execution confirmation
     output_confirmation : bool
@@ -58,3 +58,6 @@ class visibility_state(MessagesState):
 
     # brand query related keywords
     brand_related_keywords: list[str] | None 
+
+    # brand user intent
+    brand_user_intent: str 

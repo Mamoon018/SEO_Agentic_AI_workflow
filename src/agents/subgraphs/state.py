@@ -12,7 +12,7 @@ class text_extracter_state(MessagesState):
 
 
     # scrapped article text
-    scrapped_article: Optional[Union[dict[str,str],str]] 
+    scrapped_text: Optional[Union[dict[str,str],str]] 
 
     # bool for tool execution confirmation
     output_confirmation : bool
