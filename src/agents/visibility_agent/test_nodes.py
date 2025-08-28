@@ -2,7 +2,7 @@
 
 from src.agents.visibility_agent.state import visibility_state
 from src.agents.visibility_agent.schemas import EXTRACT_USER_ARTICLE_SCHEMA, ENTITIES_EXTRACTOR_SCHEMA, KEYWORD_SHORTLISTER_SCHEMA, PROMPT_GENERATOR_SCHEMA, PROMPT_CITATION_FORMATTER_SCHEMA, GEO_METRICS_SCHEMA
-from src.agents.visibility_agent.prompts import ENTITIES_EXTRACTOR_PROMPT, PROMPT_GENERATOR_PROMPT, PROMPT_SEARCHER_PROMPT, PROMPTS_CITATION_FORMATTER_PROMPT, GEO_METRICS_PROMPT
+from src.agents.visibility_agent.prompts import ENTITIES_EXTRACTOR_PROMPT, PROMPT_GENERATOR_PROMPT, PROMPT_SEARCHER_PROMPT, PROMPTS_CITATION_FORMATTER_PROMPT, GEO_METRICS_PROMPT, BRAND_PROMPTS_GENERATOR_PROMPT
 from src.tools.web_extractor_tool import DIFFBOT_TOOL
 from src.agents.subgraphs.edges import text_extracter_workflow, prompt_generator_builder_workflow
 from src.utils.settings import get_key, settings
@@ -90,10 +90,12 @@ async def label_the_task(state:visibility_state):
 
     task_label: str = None
 
-    if state["user_url"] is not None:
-        task_label = "Article task"
-    else: 
+
+
+    if state["brand_domain"] is not None:
         task_label = "Brand task"
+    else: 
+        task_label = "Article task"
 
     return {"task_label": task_label}
 
@@ -515,8 +517,52 @@ async def brand_keyword_shortlister_subgraph_invoker(state:visibility_state):
     except Exception as e:
         raise RuntimeError(f"Error occurred in article keyword shortlister subgraph invoker due to {e}") from e
 
+### lets get the brand prompt generator 
+async def brand_prompt_generator(state:visibility_state):
 
+    """
+    It takes the related keywords, domain text, shortlisted keywords from gkp as an input and also the 
+    aspect of the brand for which user want to track the brand. 
 
+    **Args:**
+    shortlisted_keywords (list[str]): It is the list of the shortlisted keywords from the list of gkp
+    scrapped_text (Optional[Union[dict[str,str],str]]): It is the text that is extracted from the domain of the brand
+    brand_user_intent (str): It shows what is the aspect about brand for which user want to check visibility
+
+    **Returns:**
+    contextual_prompts (list[str]): It is the list of the contextual prompts for which user brand will be tracked
+
+    """
+
+    shortlisted_keywords: list[str] = state["shortlisted_keywords"]
+    brandsite_text: str = state["scrapped_text"].get("article_text","N/A")
+    brand_user_intent: str = state["brand_user_intent"]
+    brand_related_keywords: list[str] = state["brand_related_keywords"]
+
+    # lets get the prompt of the node
+    prompt = PromptTemplate(input_variables= ["brandsite_text", "brand_related_keywords" , "brand_user_intent", "shortlisted_keywords"],
+                            template=BRAND_PROMPTS_GENERATOR_PROMPT)
+    
+    keyword_generator_prompt = prompt.format(brandsite_text=brandsite_text,
+                                            brand_user_intent=brand_user_intent, brand_related_keywords = brand_related_keywords , shortlisted_keywords=shortlisted_keywords)
+    
+    # lets initialize the list to store prompts
+    contextual_prompts: list[str] = []
+
+    try:
+
+        prompt_generator_response: PROMPT_GENERATOR_SCHEMA = await PROMPT_GENERATOR_MODEL_WITH_FALLBACKS.ainvoke(
+            input= [HumanMessage(content=keyword_generator_prompt)]
+        )
+
+        contextual_prompts = prompt_generator_response.contextual_prompts
+
+        return {
+            "contextual_prompts": contextual_prompts
+        }
+
+    except Exception as e:
+        raise RuntimeError(f"error raised in prompt_generator node due to {e}") from e
 
 
 
@@ -750,6 +796,7 @@ builder.add_node(node="article_prompt_generator", action=article_prompt_generato
 #builder.add_node(node="geo_article_metrics", action=geo_article_metrics)
 builder.add_node(node="brand_text_extracter_subgraph_invoker",action= brand_text_extracter_subgraph_invoker)
 builder.add_node(node="brand_keyword_shortlister_subgraph_invoker",action=brand_keyword_shortlister_subgraph_invoker)
+builder.add_node(node="brand_prompt_generator", action=brand_prompt_generator)
 
 
 builder.add_edge(START,"label_the_task")
@@ -775,7 +822,8 @@ builder.add_conditional_edges(
         "text_not_extracted":END
     }
 )
-builder.add_edge("brand_keyword_shortlister_subgraph_invoker",END)
+builder.add_edge("brand_keyword_shortlister_subgraph_invoker","brand_prompt_generator")
+builder.add_edge("brand_prompt_generator", END)
 """
 builder.add_edge("entities_extractor","gkp_caller1")
 builder.add_edge("gkp_caller1", "keyword_shortlister")
@@ -805,7 +853,8 @@ os.getenv("OPIK_API_KEY")
 
 
 tracer = OpikTracer(graph=workflow.get_graph(xray=True),project_name= opik_project_name)
-inputs = {"user_url": "https://langchain-ai.github.io/langgraph/how-tos/tool-calling/"}
+inputs = {"brand_domain": "https://www.tesla.com/", "brand_related_keywords": ["Tesla prices", "EV cars", "affordable electric vehicles"], 
+          "brand_user_intent": "I want to check how LLMs are comparing the prices of Tesla with other EV cars." }
 result = asyncio.run(workflow.ainvoke(inputs,config={"callbacks": [tracer]}))
 
 

@@ -60,4 +60,4 @@ class visibility_state(MessagesState):
     brand_related_keywords: list[str] | None 
 
     # brand user intent
-    brand_user_intent: str 
+    brand_user_intent: str | None

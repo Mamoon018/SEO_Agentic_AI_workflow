@@ -9,7 +9,7 @@ from langchain.prompts import PromptTemplate
 from langchain_core.messages import HumanMessage
 from pydantic import AnyUrl
 from typing import Optional, Union
-from src.agents.visibility_agent.temp_data import planner_list1
+from src.agents.visibility_agent.temp_data import planner_list2
 
 
 
@@ -93,7 +93,7 @@ async def gkp_caller(state:prompt_generator_subgraph_state):
         #gkp_planner_list: GKP_CALLER = await gkp.generate_keywords(keywords=entities,url=user_url)
 
         # For now, we will use dummy results of the gkp.generate_keywords
-        gkp_planner_list: list[dict[str, str | int | dict[str,int]]] = planner_list1
+        gkp_planner_list: list[dict[str, str | int | dict[str,int]]] = planner_list2
 
 
         return {

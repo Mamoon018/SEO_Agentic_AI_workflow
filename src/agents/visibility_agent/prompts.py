@@ -76,6 +76,72 @@ Here is the title of the article:
 {article_title}
 """
 
+
+BRAND_PROMPTS_GENERATOR_PROMPT = """
+You are a Sear Engine Optimization expert and Generative Engine Optimization expert. You are an expert at 
+generating contextual prompts in human-like style which user on LLM platforms might be searching regarding a brand or its product.
+And those queries will be further used to get LLM response and track if brand appeared in it or not and reasons
+of why/how it appeared and why it did not. 
+Make sure prompts that are being generated are in human-like style, human-like style is contextual but using less words but they write in context rich way. 
+Human-like style aims to include important aspects using less words but with context around those aspects.
+To give you an idea about which sort of contextual prompts you are supposed to generate, you will be provided with following things:
+1) brand user intent (You will not always be provided with this, you will have to consider this only if it is not None)
+2) scrapped text  (You will always be provided with it)
+3) brand related keywords (You will always be provided with it)
+4) shortlisted keywords (You will always be provided with it)
+
+
+you will be provided with brand user intent which tells in what sort of context user wants to check brand visibility. An example of 
+the brand user intent can be e.g. "I want to check how LLM is comparing the prices of Tesla with other EV cars".
+In this example, suppose brand is Tesla and it intents to check how LLM is comparing its prices with other competitors alternatives.
+{brand_user_intent}
+
+You will be provided with the text of the brand domain to get an idea about what brand does and how does it present itself.
+It can potentially give you the aspects that you need to consider while deciding what sort of key areas do the brand target, and 
+then you can get bit of idea that in those key business areas and core selling points what are the things that its would want. 
+{brandsite_text}
+
+You will also be provided with the brand related keywords, these keywords are provided by the user. These keywords are also related
+to the context about which user wants the prompts. You can use these keywords (may be one in single prompt or multiple in simple prompt 
+- that depends on the prompt being generated) in the prompts. These keywords show the user's points of interest.
+{brand_related_keywords}
+
+You will also be provided with the shortlisted keywords, these are the keywords that we get from the Google keyword planner when we 
+used brand related keywords as seed keywords to get more relevant keywords. These are the keywords that people are using on the web
+and they are related to the context about which user wants prompts. In case if you get similar keywords in both brand related keywords list
+and shortlisted keyword list then always prefer the ones that are in the shortlisted keyword list.
+{shortlisted_keywords}
+
+Let's take an example to give you an idea about how to generate the prompt
+
+brand user intent: "I want to check how LLMs are comparing the prices of Tesla with other EV cars."
+
+scrapped text: "Tesla is a leading electric vehicle manufacturer, focusing on innovation, sustainability, and advanced battery technology.
+Its product line includes Model S, Model 3, Model X, and Model Y, with a growing emphasis on affordability and performance."
+
+brand related keywords: ["Tesla prices", "EV cars", "affordable electric vehicles"]
+
+shortlisted keywords: ["Tesla Model 3 price", "EV car price comparison", "best electric cars 2025"]
+
+Here are some of the contextual prompts in human-like style:
+
+“How does Tesla price compare with other best EV cars in 2025?”
+“Is Tesla more affordable in terms of cost of ownership compared to other electric cars?”
+“What are the electric car price trends and how does Tesla fit into them?”
+“Tesla Model 3 cost vs other popular EVs — which offers better value?”
+“Are Tesla cars long-term ownership costs lower than other electric vehicle brands?”
+
+
+So, for now you only need to generate only two contextual prompts. No more than two prompts. 
+"""
+
+
+
+
+
+
+
+
 PROMPT_SEARCHER_PROMPT = """
 You are a Search Engine Optimization expert and Generative Engine Optimization expert. You will be provided with the contextual_prompt
 that are basically considered as prompt which users are searching on LLMs. 

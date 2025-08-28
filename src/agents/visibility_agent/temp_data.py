@@ -187,7 +187,7 @@ planner_list1 = [
 
 planner_list2 = [
     {
-      "text": "LangGraph flexibility to create agentic workflow",
+      "text": "Tesla Model 3 price 2025",
       "competition": "LOW",
       "average_monthly_searches": 390,
       "competition_index": 11,
@@ -207,7 +207,7 @@ planner_list2 = [
       }
     },
     {
-      "text": "AI models in agents with autonomous decision making",
+      "text": "Tesla Model Y cost comparison",
       "competition": "LOW",
       "average_monthly_searches": 260,
       "competition_index": 24,
@@ -227,7 +227,7 @@ planner_list2 = [
       }
     },
     {
-      "text": "ToolNode often crashes",
+      "text": "Tesla vs BYD EV prices",
       "competition": "LOW",
       "average_monthly_searches": 260,
       "competition_index": 24,
@@ -247,7 +247,7 @@ planner_list2 = [
       }
     },
     {
-      "text": "AI applications changing course of SaaS",
+      "text": "Cheapest Tesla car in Europe",
       "competition": "LOW",
       "average_monthly_searches": 40,
       "competition_index": 19,
@@ -267,7 +267,7 @@ planner_list2 = [
       }
     },
     {
-      "text": "Agentic AI offering wide range of architects",
+      "text": "Tesla Model S price Germany",
       "competition": "LOW",
       "average_monthly_searches": 30,
       "competition_index": 18,
@@ -287,7 +287,7 @@ planner_list2 = [
       }
     },
     {
-      "text": "tools integration",
+      "text": "Tesla vs Hyundai Ioniq 5 price",
       "competition": "LOW",
       "average_monthly_searches": 10,
       "competition_index": 7,
