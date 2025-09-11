@@ -163,12 +163,12 @@ PROMPTS_CITATION_FORMATTER_PROMPT = """
 You are a Search Engine Optimization expert and Generative Engine Optimization expert. You are provided with the
 output of the perplexity. That output is not in the json format. It is not clean. 
 It includes different types of information, the information that is relevant to us is the contextual prompt,
-information of cited articles for that prompt, and perplexity response to the contextual prompt.
+information of cited articles for that prompt, and LLM response to the contextual prompt.
 for each context prompt provide the cited articles and response for prompt in the output. 
 Let's suppose we have the 15 prompts then we will have 15 objects that contains context prompts, cited articles, and response for prompt.
 Information about the cited articles include title of artciles, url of articles, date of article, last date article updated.
 
-In case, you do not find information for any required field, or you find that in the perplexity output field is assigned NULL then just put NULL in the value of the particle field in your structured output.
+In case, you do not find information for any required field, or you find that in the LLM output field is assigned NULL then just put NULL in the value of that particuler field in your structured output.
 
 you will be provided with the output which includes different contextual prompts, perplexity response to the contextual prompt and information about their respective cited articles.
 Here is the perplexity output:

@@ -598,7 +598,7 @@ async def perplexity_citations_for_prompts(state:visibility_state):
         "perplexity_response": perplexity_response
     }
 
-    # Lets use the LangGraph SEND API that will be use defined llm node for all the prompts in parallelization style
+    # Lets use the LangGraph SEND API that will use defined llm node for running all the prompts in parallelization
 async def continue_perplexity_citations_for_prompts(state:visibility_state):
     return  [Send("perplexity_citations_for_prompts",{"contextual_prompts": cp}) for cp in state["contextual_prompts"]]
     # Here send will take each contextual prompt and pass it to the target node specified as param. It will pass 

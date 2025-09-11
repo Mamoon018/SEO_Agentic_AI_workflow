@@ -1,5 +1,6 @@
 from langgraph.graph import MessagesState
-from typing import Optional, Union
+from typing import Optional, Union, Annotated
+import operator
 from pydantic import AnyUrl
 
 
@@ -32,4 +33,20 @@ class prompt_generator_subgraph_state(MessagesState):
     # Keyword shortlister node output: list of keywords shortlisted based on their metrics
     shortlisted_keywords: list[str]
 
+
+                                    ####  Prompts call send api subgraph state  ####
+
+class prompts_caller_subgraph_state(MessagesState):
+
+    # contextual prompts will be received as an input variable for the node
+    contextual_prompts: list[str] 
+    # llm name to be used will be received as an input variable for the node
+    llm_name: str
+
+    # citation for prompts node will return the llm_response for all contextual prompts as an output
+    llm_response: Annotated[list[str], operator.add]
+
+    # prompt response reducer will convert the raw output of the llm into strctured output
+    # structured output of llm response
+    prompts_with_citations: list[dict[str,str|list[dict[str,str]]]]
 

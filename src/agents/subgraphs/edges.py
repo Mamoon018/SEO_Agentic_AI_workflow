@@ -1,7 +1,7 @@
 
-from src.agents.subgraphs.nodes import diffbot_text_extracter, gkp_caller, keyword_shortlister
+from src.agents.subgraphs.nodes import diffbot_text_extracter, gkp_caller, keyword_shortlister, citations_for_prompts, prompts_citation_reducer
 from langgraph.graph import StateGraph, START, END
-from src.agents.subgraphs.state import text_extracter_state, prompt_generator_subgraph_state
+from src.agents.subgraphs.state import text_extracter_state, prompt_generator_subgraph_state, prompts_caller_subgraph_state
                             #### Text Extracter Subgraph Edges ####
 
 text_extracter_builder = StateGraph(text_extracter_state)
@@ -24,3 +24,15 @@ prompt_generator_builder.add_edge("gkp_caller","keyword_shortlister")
 prompt_generator_builder.add_edge("keyword_shortlister", END)
 
 prompt_generator_builder_workflow = prompt_generator_builder.compile()
+
+                            #### Prompt caller subgraph Graph ####
+
+prompt_caller_builder = StateGraph(prompts_caller_subgraph_state)
+prompt_caller_builder.add_node(node="citations_for_prompts", action= citations_for_prompts)
+prompt_caller_builder.add_node(node="prompts_citation_reducer", action= prompts_citation_reducer)
+
+prompt_caller_builder.add_edge(START,"citations_for_prompts")
+prompt_caller_builder.add_edge("citations_for_prompts","prompts_citation_reducer")
+prompt_caller_builder.add_edge("prompts_citation_reducer",END)
+
+prompt_caller_builder_workflow = prompt_caller_builder.compile()
