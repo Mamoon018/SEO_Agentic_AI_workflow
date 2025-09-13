@@ -575,20 +575,6 @@ async def brand_prompt_generator(state:visibility_state):
         raise RuntimeError(f"error raised in prompt_generator node due to {e}") from e
 
 
-
-# GEO Metrics for Brand 
-async def brand_geo_metrics(state:visibility_state):
-    """
-    It takes the formatted response of the llm for all the contextual prompts, and compile the metrics using that
-    data. Metrics are related to brand visibility, brand sentiment, factors driving those sentiments, 
-    
-    """
-
-
-
-
-
-
                         ##### TILL HERE WE HAVE NEW AGENTIC WORKFLOW #####
 
 
@@ -710,14 +696,6 @@ async def geo_article_metrics(state:visibility_state):
 
 
 """
-
-
-                ####  BRAND METRICS  ####
-
-
-
-
-
 
 
 

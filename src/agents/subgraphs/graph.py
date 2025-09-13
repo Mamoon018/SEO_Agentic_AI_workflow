@@ -17,10 +17,11 @@ opik_api_key = get_key(settings.OPIK_API_KEY)
 
 """
 tracer = OpikTracer(graph=text_extracter_workflow.get_graph(xray=True),project_name= opik_project_name)
-inputs = {"user_url": "https://langchain-ai.github.io/langgraph/how-tos/tool-calling/"}
+inputs = {"user_url": "https://www.drivingelectric.com/best-cars/584/best-electric-cars"}
 result = asyncio.run(text_extracter_workflow.ainvoke(inputs,config={"callbacks": [tracer]}))
+"""
 
-
+"""
                                 ####  Prompt Generator Workflow Subgraph Graph  ####
 
 tracer = OpikTracer(graph=prompt_generator_builder_workflow.get_graph(xray=True),project_name= opik_project_name)
@@ -29,8 +30,11 @@ result = asyncio.run(prompt_generator_builder_workflow.ainvoke(inputs,config={"c
 # Cannot test here because some of the input variables required to run these nodes coming from the Main state so, 
 #it has to be invoked with those input variables
 """
+
+"""
                                 ####  Prompt caller subgraph Graph  ####
 tracer = OpikTracer(graph=prompt_caller_builder_workflow.get_graph(xray=True),project_name= opik_project_name)
 inputs = {"contextual_prompts": ["what are the best models in EV cars", "what are the best tesla models"]}
 result = asyncio.run(prompt_caller_builder_workflow.ainvoke(inputs,config={"callbacks": [tracer]}))
 
+"""
