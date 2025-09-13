@@ -576,86 +576,6 @@ async def brand_prompt_generator(state:visibility_state):
 
 
 
-
-# Article prompt caller subgraph invoker
-async def article_prompt_caller_subgraph_invoker(state:visibility_state):
-
-    """
-    It takes the article related contextual prompts as an input and invoke the subgraph of prompts response caller
-    that gives the formatted results of the llm response for each prompt. 
-
-    **Args:**
-    article_contextual_prompts (list[str]): It is the list of article related contextual prompts for which we will get responses.
-
-    **Returns:**
-    prompts_with_citations (list[dict[str,str|list[dict[str,str]]]]): It is the formatted results of the prompts, llm response for prompts, and their citations respectively.
-
-    **Raises:**
-    It raises the error if it is unable to invoke the subgraph.
-
-    """
-
-    # lets get the input variable
-    article_contextual_prompts: list[str] = state["article_contextual_prompts"]
-
-    # lets initialize the final output of the subgraph which is prompts and their citations in required format
-    prompts_with_citations: list[dict[str,str|list[dict[str,str]]]] = []
-
-    try:
-        # lets invoke the prompts caller subgraph
-        formatted_citations: PROMPT_CITATION_FORMATTER_SCHEMA = await prompt_caller_builder_workflow.ainvoke(input={"contextual_prompts":article_contextual_prompts})
-
-        # lets get the output of the subgraph
-        prompts_with_citations = formatted_citations["prompts_with_citations"]
-
-        return {
-            "prompts_with_citations": prompts_with_citations
-        }
-
-    except Exception as e:
-        raise RuntimeError(f"Error occurred in the article prompt caller subgraph invoker due to {e}") from e
-
-
-
-# Brand prompt caller subgraph
-async def brand_prompt_caller_subgraph_invokder(state:visibility_state):
-    """
-    It takes the brand related contextual prompts as an input and invokes the subgraph that contains node related 
-    to getting llm response for each prompt, and also format the llm response into required format. 
-
-    **Args:** 
-    brand_contextual_prompts (list[str]): It is the list of the brand related contextual prompts for which we need to get llm response
-
-    **Returns:**
-    prompts_with_citations: list[dict[str,str|list[dict[str,str]]]] 
-    
-    **Raises:**
-    It raises the error when it is unable to invoke the subgraph
-    """
-
-    # lets get the input variables 
-    brand_contextual_prompts: list[str] = state["brand_contextual_prompts"]
-
-    # lets initialize the prompts_with_citations
-    prompts_with_citations: list[dict[str,str|list[dict[str,str]]]] = []
-
-    try:
-
-        # lets invoke the subgraph 
-        formatted_citations: PROMPT_CITATION_FORMATTER_SCHEMA = await prompt_caller_builder_workflow.ainvoke(input={"contextual_prompts":brand_contextual_prompts})
-
-        # lets fetch the results from subgraph 
-        prompts_with_citations = formatted_citations["prompts_with_citations"]
-
-        return {
-            "prompts_with_citations": prompts_with_citations
-        }
-
-    except Exception as e:
-        raise RuntimeError(f"Error raised in brand prompt caller subgraph invoker due to {e}") from e 
-
-
-
 # GEO Metrics for Brand 
 async def brand_geo_metrics(state:visibility_state):
     """
@@ -906,8 +826,6 @@ builder.add_node(node="article_prompt_generator", action=article_prompt_generato
 builder.add_node(node="brand_text_extracter_subgraph_invoker",action= brand_text_extracter_subgraph_invoker)
 builder.add_node(node="brand_keyword_shortlister_subgraph_invoker",action=brand_keyword_shortlister_subgraph_invoker)
 builder.add_node(node="brand_prompt_generator", action=brand_prompt_generator)
-builder.add_node(node="article_prompt_caller_subgraph_invoker", action=article_prompt_caller_subgraph_invoker)
-builder.add_node(node="brand_prompt_caller_subgraph_invokder", action=brand_prompt_caller_subgraph_invokder)
 
 builder.add_edge(START,"label_the_task")
 builder.add_conditional_edges(source="label_the_task",
@@ -933,8 +851,7 @@ builder.add_conditional_edges(
     }
 )
 builder.add_edge("brand_keyword_shortlister_subgraph_invoker","brand_prompt_generator")
-builder.add_edge("brand_prompt_generator", "brand_prompt_caller_subgraph_invokder")
-builder.add_edge("brand_prompt_caller_subgraph_invokder", END)
+builder.add_edge("brand_prompt_generator", END)
 """
 builder.add_edge("entities_extractor","gkp_caller1")
 builder.add_edge("gkp_caller1", "keyword_shortlister")
@@ -946,8 +863,7 @@ builder.add_edge("entities_extractor","article_keyword_shortlister_subgraph_invo
 #builder.add_conditional_edges(    "article_prompts_generator_subgraph_invoker",continue_perplexity_citations_for_prompts,["perplexity_citations_for_prompts"])
 
 builder.add_edge("article_keyword_shortlister_subgraph_invoker","article_prompt_generator")
-builder.add_edge("article_prompt_generator","article_prompt_caller_subgraph_invoker")
-builder.add_edge("article_prompt_caller_subgraph_invoker", END)
+builder.add_edge("article_prompt_generator", END)
 
 #builder.add_edge("perplexity_citations_for_prompts","prompts_citation_reducer")
 #builder.add_edge("prompts_citation_reducer", "geo_article_metrics")

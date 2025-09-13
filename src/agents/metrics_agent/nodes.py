@@ -2,6 +2,7 @@
 from src.agents.metrics_agent.state import metrics_state
 from src.agents.metrics_agent.schemas import PROMPT_CITATION_FORMATTER_SCHEMA
 from src.agents.subgraphs.edges import prompt_caller_builder_workflow
+from src.agents.metrics_agent.test_data import prompts_with_citations
 
 
 
@@ -35,6 +36,7 @@ async def article_prompt_caller_subgraph_invoker(state:metrics_state):
 
         # lets get the output of the subgraph
         prompts_with_citations = formatted_citations["prompts_with_citations"]
+
 
         return {
             "prompts_with_citations": prompts_with_citations

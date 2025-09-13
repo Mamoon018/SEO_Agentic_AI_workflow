@@ -6,6 +6,7 @@ from src.tools.web_extractor_tool import DIFFBOT_TOOL
 from src.utils.keyword_preprocessor import keyword_processor
 from src.utils.models_initializer import initialize_model_with_fallbacks
 from src.utils.models_initializer import initialize_model_with_fallbacks, get_openai_model, get_perplexity_llm
+from src.agents.subgraphs.test_data import prompts_with_citations_dummy
 from langchain.prompts import PromptTemplate
 from langchain_core.messages import HumanMessage
 from langgraph.types import Send
@@ -228,7 +229,7 @@ async def prompts_citation_reducer(state:prompts_caller_subgraph_state):
     #prompts_with_citations = formatter_response.prompts_with_citations
 
     # FOR TESTING PURPOSE
-    prompts_with_citations = ["Yes, citations were provided by the perplexity"]
+    prompts_with_citations = prompts_with_citations_dummy
 
     return {
             "prompts_with_citations": prompts_with_citations
