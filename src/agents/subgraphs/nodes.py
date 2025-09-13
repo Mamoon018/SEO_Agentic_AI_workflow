@@ -173,10 +173,10 @@ async def citations_for_prompts(state:prompts_caller_subgraph_state):
     llm_response: list[str] = []
     
     # lets get the llm
-    citation_results: prompts_caller_schema = await get_perplexity_llm(1,prompt=perplexity_citations_for_prompts_prompt)
+    #citation_results: prompts_caller_schema = await get_perplexity_llm(1,prompt=perplexity_citations_for_prompts_prompt)
 
     # FOR TESTING PURPOSE
-    #citation_results = ["Hello 123", "Hello 456"]
+    citation_results = ["Hello 123", "Hello 456"]
 
     
     # lets get the result and store it
@@ -188,8 +188,8 @@ async def citations_for_prompts(state:prompts_caller_subgraph_state):
     }
 
     # Lets use the LangGraph SEND API that will use defined llm node for running all the prompts in parallelization
-async def continue_perplexity_citations_for_prompts(state:prompts_caller_subgraph_state):
-    return  [Send("citations_for_prompts",{"contextual_prompts": cp}) for cp in state["contextual_prompts"]]
+#async def continue_perplexity_citations_for_prompts(state:prompts_caller_subgraph_state):
+    #return  [Send("citations_for_prompts",{"contextual_prompts": cp}) for cp in state["contextual_prompts"]]
     # Here send will take each contextual prompt and pass it to the target node specified as param. It will pass 
     # all prompts parallely. 
 
@@ -221,14 +221,14 @@ async def prompts_citation_reducer(state:prompts_caller_subgraph_state):
     prompts_with_citations  = []
 
     # lets invoke the llm 
-    formatter_response: prompt_citation_formatter_schema = await PROMPTS_CITATION_FORMATTER_MODEL_WITH_FALLBACKS.ainvoke(
-        [HumanMessage(content=prompts_citation_formatter_prompt)])
+    #formatter_response: prompt_citation_formatter_schema = await PROMPTS_CITATION_FORMATTER_MODEL_WITH_FALLBACKS.ainvoke(
+    #    [HumanMessage(content=prompts_citation_formatter_prompt)])
     
 
-    prompts_with_citations = formatter_response.prompts_with_citations
+    #prompts_with_citations = formatter_response.prompts_with_citations
 
     # FOR TESTING PURPOSE
-    #prompts_with_citations = ["Yes, citations were provided by the perplexity"]
+    prompts_with_citations = ["Yes, citations were provided by the perplexity"]
 
     return {
             "prompts_with_citations": prompts_with_citations

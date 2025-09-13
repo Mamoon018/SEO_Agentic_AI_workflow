@@ -9,7 +9,7 @@ import operator
 
 class visibility_state(MessagesState):
 
-                                #### Main workflow state ####
+                                #### Main workflow ####
     # label the workflow
     task_label: str
 
@@ -22,33 +22,35 @@ class visibility_state(MessagesState):
     # bool for tool execution confirmation
     output_confirmation : bool
     
-
-
-
-                                    #### Article task state variables ####
-    # Input url of the user
-    user_url: AnyUrl | None
-
-    # list of entities extracted from the article
-    entities: list[str]
-
     # list of gkp planner keywords
     gkp_planner_list1: list[dict[str, str | int | dict[str,int]]]
 
     # list of the shortlisted keywords
     shortlisted_keywords: list[str]
 
-    # list of contextual-prompts
-    contextual_prompts: list[str]
-
     # list of the articles cited by LLM
-    perplexity_response: Annotated[list[str], operator.add]
+    llm_response: Annotated[list[str], operator.add]
 
     # structured output of perplexity response
     prompts_with_citations: list[dict[str,str|list[dict[str,str]]]]
+
+
+
+                                #### Article task state variables ####
+
+
+    # Input url of the user
+    user_url: AnyUrl | None
+
+    # list of entities extracted from the article
+    entities: list[str]
+
+    # article related list of contextual-prompts
+    article_contextual_prompts: list[str]
+
     
 
-                                    #### Brand Task related state variables ####
+                                #### Brand Task related state variables ####
 
     # Brand name
     brand_name: str | None
@@ -61,3 +63,6 @@ class visibility_state(MessagesState):
 
     # brand user intent
     brand_user_intent: str | None
+
+    # brand related contextual prompts
+    brand_contextual_prompts: list[str]

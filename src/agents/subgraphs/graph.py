@@ -33,3 +33,4 @@ result = asyncio.run(prompt_generator_builder_workflow.ainvoke(inputs,config={"c
 tracer = OpikTracer(graph=prompt_caller_builder_workflow.get_graph(xray=True),project_name= opik_project_name)
 inputs = {"contextual_prompts": ["what are the best models in EV cars", "what are the best tesla models"]}
 result = asyncio.run(prompt_caller_builder_workflow.ainvoke(inputs,config={"callbacks": [tracer]}))
+

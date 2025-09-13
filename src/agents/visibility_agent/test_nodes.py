@@ -1,13 +1,14 @@
 
 
 from src.agents.visibility_agent.state import visibility_state
-from src.agents.visibility_agent.schemas import EXTRACT_USER_ARTICLE_SCHEMA, ENTITIES_EXTRACTOR_SCHEMA, KEYWORD_SHORTLISTER_SCHEMA, PROMPT_GENERATOR_SCHEMA, PROMPT_CITATION_FORMATTER_SCHEMA, GEO_METRICS_SCHEMA
+from src.agents.visibility_agent.schemas import EXTRACT_USER_ARTICLE_SCHEMA, ENTITIES_EXTRACTOR_SCHEMA, KEYWORD_SHORTLISTER_SCHEMA, ARTICLE_PROMPT_GENERATOR_SCHEMA, BRAND_PROMPT_GENERATOR_SCHEMA, PROMPT_CITATION_FORMATTER_SCHEMA, GEO_METRICS_SCHEMA
 from src.agents.visibility_agent.prompts import ENTITIES_EXTRACTOR_PROMPT, PROMPT_GENERATOR_PROMPT, PROMPT_SEARCHER_PROMPT, PROMPTS_CITATION_FORMATTER_PROMPT, GEO_METRICS_PROMPT, BRAND_PROMPTS_GENERATOR_PROMPT
 from src.tools.web_extractor_tool import DIFFBOT_TOOL
-from src.agents.subgraphs.edges import text_extracter_workflow, prompt_generator_builder_workflow
+from src.agents.subgraphs.edges import text_extracter_workflow, prompt_generator_builder_workflow, prompt_caller_builder_workflow
 from src.utils.settings import get_key, settings
 from pydantic import AnyUrl
-from typing import Union, Optional
+from typing import Union, Optional, Annotated
+import operator
 from langgraph.graph import StateGraph
 from langgraph.types import Send
 from langgraph.graph import END, START
@@ -42,12 +43,21 @@ ENTITIES_EXTRACTOR_MODEL_WITH_FALLBACKS= initialize_model_with_fallbacks(
 )
 
 # Prompt generator model
-PROMPT_GENERATOR_MODEL_WITH_FALLBACKS= initialize_model_with_fallbacks(
+ARTICLE_PROMPT_GENERATOR_MODEL_WITH_FALLBACKS= initialize_model_with_fallbacks(
     primary_model_fn=get_openai_model,
     primary_model_kwargs={"model_num": 2, "temperature": 0.5},
     fallback_model_fns=[get_openai_model],
     fallback_model_kwargs_list=[{"model_num": 1, "temperature": 0.5}],
-    structured_output_schema=PROMPT_GENERATOR_SCHEMA,
+    structured_output_schema=ARTICLE_PROMPT_GENERATOR_SCHEMA,
+)
+
+# Prompt generator model
+BRAND_PROMPT_GENERATOR_MODEL_WITH_FALLBACKS= initialize_model_with_fallbacks(
+    primary_model_fn=get_openai_model,
+    primary_model_kwargs={"model_num": 2, "temperature": 0.5},
+    fallback_model_fns=[get_openai_model],
+    fallback_model_kwargs_list=[{"model_num": 1, "temperature": 0.5}],
+    structured_output_schema=BRAND_PROMPT_GENERATOR_SCHEMA,
 )
 
 # prompts citations formatter model
@@ -428,18 +438,18 @@ async def article_prompt_generator(state:visibility_state):
                                             entities=entities, shortlisted_keywords=shortlisted_keywords)
     
     # lets initialize the list to store prompts
-    contextual_prompts: list[str] = []
+    article_contextual_prompts: list[str] = []
 
     try:
 
-        prompt_generator_response: PROMPT_GENERATOR_SCHEMA = await PROMPT_GENERATOR_MODEL_WITH_FALLBACKS.ainvoke(
+        prompt_generator_response: ARTICLE_PROMPT_GENERATOR_SCHEMA = await ARTICLE_PROMPT_GENERATOR_MODEL_WITH_FALLBACKS.ainvoke(
             input= [HumanMessage(content=keyword_generator_prompt)]
         )
 
-        contextual_prompts = prompt_generator_response.contextual_prompts
+        article_contextual_prompts = prompt_generator_response.article_contextual_prompts
 
         return {
-            "contextual_prompts": contextual_prompts
+            "article_contextual_prompts": article_contextual_prompts
         }
 
     except Exception as e:
@@ -547,18 +557,18 @@ async def brand_prompt_generator(state:visibility_state):
                                             brand_user_intent=brand_user_intent, brand_related_keywords = brand_related_keywords , shortlisted_keywords=shortlisted_keywords)
     
     # lets initialize the list to store prompts
-    contextual_prompts: list[str] = []
+    brand_contextual_prompts: list[str] = []
 
     try:
 
-        prompt_generator_response: PROMPT_GENERATOR_SCHEMA = await PROMPT_GENERATOR_MODEL_WITH_FALLBACKS.ainvoke(
+        prompt_generator_response: BRAND_PROMPT_GENERATOR_SCHEMA = await BRAND_PROMPT_GENERATOR_MODEL_WITH_FALLBACKS.ainvoke(
             input= [HumanMessage(content=keyword_generator_prompt)]
         )
 
-        contextual_prompts = prompt_generator_response.contextual_prompts
+        brand_contextual_prompts = prompt_generator_response.brand_contextual_prompts
 
         return {
-            "contextual_prompts": contextual_prompts
+            "brand_contextual_prompts": brand_contextual_prompts
         }
 
     except Exception as e:
@@ -567,14 +577,112 @@ async def brand_prompt_generator(state:visibility_state):
 
 
 
+# Article prompt caller subgraph invoker
+async def article_prompt_caller_subgraph_invoker(state:visibility_state):
 
-# lets use the perplexity model to get the search results
-async def perplexity_citations_for_prompts(state:visibility_state):
     """
-    It takes the generated contextual prompts as an input and generate the responses for it to simulate the user
-    searches and then check which articles are appearing in the response. 
+    It takes the article related contextual prompts as an input and invoke the subgraph of prompts response caller
+    that gives the formatted results of the llm response for each prompt. 
+
+    **Args:**
+    article_contextual_prompts (list[str]): It is the list of article related contextual prompts for which we will get responses.
+
+    **Returns:**
+    prompts_with_citations (list[dict[str,str|list[dict[str,str]]]]): It is the formatted results of the prompts, llm response for prompts, and their citations respectively.
+
+    **Raises:**
+    It raises the error if it is unable to invoke the subgraph.
+
+    """
+
+    # lets get the input variable
+    article_contextual_prompts: list[str] = state["article_contextual_prompts"]
+
+    # lets initialize the final output of the subgraph which is prompts and their citations in required format
+    prompts_with_citations: list[dict[str,str|list[dict[str,str]]]] = []
+
+    try:
+        # lets invoke the prompts caller subgraph
+        formatted_citations: PROMPT_CITATION_FORMATTER_SCHEMA = await prompt_caller_builder_workflow.ainvoke(input={"contextual_prompts":article_contextual_prompts})
+
+        # lets get the output of the subgraph
+        prompts_with_citations = formatted_citations["prompts_with_citations"]
+
+        return {
+            "prompts_with_citations": prompts_with_citations
+        }
+
+    except Exception as e:
+        raise RuntimeError(f"Error occurred in the article prompt caller subgraph invoker due to {e}") from e
+
+
+
+# Brand prompt caller subgraph
+async def brand_prompt_caller_subgraph_invokder(state:visibility_state):
+    """
+    It takes the brand related contextual prompts as an input and invokes the subgraph that contains node related 
+    to getting llm response for each prompt, and also format the llm response into required format. 
+
+    **Args:** 
+    brand_contextual_prompts (list[str]): It is the list of the brand related contextual prompts for which we need to get llm response
+
+    **Returns:**
+    prompts_with_citations: list[dict[str,str|list[dict[str,str]]]] 
+    
+    **Raises:**
+    It raises the error when it is unable to invoke the subgraph
+    """
+
+    # lets get the input variables 
+    brand_contextual_prompts: list[str] = state["brand_contextual_prompts"]
+
+    # lets initialize the prompts_with_citations
+    prompts_with_citations: list[dict[str,str|list[dict[str,str]]]] = []
+
+    try:
+
+        # lets invoke the subgraph 
+        formatted_citations: PROMPT_CITATION_FORMATTER_SCHEMA = await prompt_caller_builder_workflow.ainvoke(input={"contextual_prompts":brand_contextual_prompts})
+
+        # lets fetch the results from subgraph 
+        prompts_with_citations = formatted_citations["prompts_with_citations"]
+
+        return {
+            "prompts_with_citations": prompts_with_citations
+        }
+
+    except Exception as e:
+        raise RuntimeError(f"Error raised in brand prompt caller subgraph invoker due to {e}") from e 
+
+
+
+# GEO Metrics for Brand 
+async def brand_geo_metrics(state:visibility_state):
+    """
+    It takes the formatted response of the llm for all the contextual prompts, and compile the metrics using that
+    data. Metrics are related to brand visibility, brand sentiment, factors driving those sentiments, 
     
     """
+
+
+
+
+
+
+                        ##### TILL HERE WE HAVE NEW AGENTIC WORKFLOW #####
+
+
+
+
+"""
+# lets use the perplexity model to get the search results
+async def perplexity_citations_for_prompts(state:visibility_state):
+    
+"""
+    #It takes the generated contextual prompts as an input and generate the responses for it to simulate the user
+    #searches and then check which articles are appearing in the response. 
+    
+"""
 
     # lets get the input variables
     contextual_prompts: str = state["contextual_prompts"]
@@ -608,17 +716,17 @@ async def continue_perplexity_citations_for_prompts(state:visibility_state):
 # lets get the reducer node ---> We  need to parse the results of the "perplexity_response" here.
 async def prompts_citation_reducer(state:visibility_state):
     
-    """
-    This node takes the perplexity output as an input and extracts the information about cited articles, 
-    perplexity answer for contextual prompt, and contextual prompt itself.
+"""
+    #This node takes the perplexity output as an input and extracts the information about cited articles, 
+    #perplexity answer for contextual prompt, and contextual prompt itself.
 
-    **Args:**
-    perplexity_response (str): It is the raw output of the perplexity for all contextual prompts
+    #**Args:**
+    #perplexity_response (str): It is the raw output of the perplexity for all contextual prompts
 
-    **Returns:**
-    prompts_with_citations (dict[dict]): It returns the clean information of the required fields in json format 
+    #**Returns:**
+    #prompts_with_citations (dict[dict]): It returns the clean information of the required fields in json format 
     
-    """
+"""
 
     # lets get the required input variable 
     perplexity_response: str = state["perplexity_response"]
@@ -646,17 +754,18 @@ async def prompts_citation_reducer(state:visibility_state):
 ## Node for Metrics ##
 
 async def geo_article_metrics(state:visibility_state):
-    """
-    This node takes the structured output of perplexity response for each prompt as an input, and uses it 
-    to calculate the different metrics and then give structured output for those metrics.
+"""
+    #This node takes the structured output of perplexity response for each prompt as an input, and uses it 
+    #to calculate the different metrics and then give structured output for those metrics.
 
-    **Args:**
-    prompts_with_citations (list): It is the list of the datapoints that contains information about the perplexity output in structured way
+    #**Args:**
+    #prompts_with_citations (list): It is the list of the datapoints that contains information about the perplexity output in structured way
 
-    **Returns:**
-    It return output containing list of different metrics
+    #**Returns:**
+    #It return output containing list of different metrics
     
-    """
+    
+"""
 
     # lets get the input variable from state
     prompts_with_citations = state["prompts_with_citations"]
@@ -680,7 +789,7 @@ async def geo_article_metrics(state:visibility_state):
     return geo_metrics_cal
 
 
-
+"""
 
 
                 ####  BRAND METRICS  ####
@@ -797,7 +906,8 @@ builder.add_node(node="article_prompt_generator", action=article_prompt_generato
 builder.add_node(node="brand_text_extracter_subgraph_invoker",action= brand_text_extracter_subgraph_invoker)
 builder.add_node(node="brand_keyword_shortlister_subgraph_invoker",action=brand_keyword_shortlister_subgraph_invoker)
 builder.add_node(node="brand_prompt_generator", action=brand_prompt_generator)
-
+builder.add_node(node="article_prompt_caller_subgraph_invoker", action=article_prompt_caller_subgraph_invoker)
+builder.add_node(node="brand_prompt_caller_subgraph_invokder", action=brand_prompt_caller_subgraph_invokder)
 
 builder.add_edge(START,"label_the_task")
 builder.add_conditional_edges(source="label_the_task",
@@ -823,19 +933,21 @@ builder.add_conditional_edges(
     }
 )
 builder.add_edge("brand_keyword_shortlister_subgraph_invoker","brand_prompt_generator")
-builder.add_edge("brand_prompt_generator", END)
+builder.add_edge("brand_prompt_generator", "brand_prompt_caller_subgraph_invokder")
+builder.add_edge("brand_prompt_caller_subgraph_invokder", END)
 """
 builder.add_edge("entities_extractor","gkp_caller1")
 builder.add_edge("gkp_caller1", "keyword_shortlister")
 builder.add_edge("keyword_shortlister","prompt_generator")
 """
+
+
 builder.add_edge("entities_extractor","article_keyword_shortlister_subgraph_invoker")
-
-
 #builder.add_conditional_edges(    "article_prompts_generator_subgraph_invoker",continue_perplexity_citations_for_prompts,["perplexity_citations_for_prompts"])
 
 builder.add_edge("article_keyword_shortlister_subgraph_invoker","article_prompt_generator")
-builder.add_edge("article_prompt_generator",END)
+builder.add_edge("article_prompt_generator","article_prompt_caller_subgraph_invoker")
+builder.add_edge("article_prompt_caller_subgraph_invoker", END)
 
 #builder.add_edge("perplexity_citations_for_prompts","prompts_citation_reducer")
 #builder.add_edge("prompts_citation_reducer", "geo_article_metrics")
@@ -853,7 +965,7 @@ os.getenv("OPIK_API_KEY")
 
 
 tracer = OpikTracer(graph=workflow.get_graph(xray=True),project_name= opik_project_name)
-inputs = {"brand_domain": "https://www.tesla.com/", "brand_related_keywords": ["Tesla prices", "EV cars", "affordable electric vehicles"], 
+inputs = {"brand_domain": "https://www.drivingelectric.com/best-cars/584/best-electric-cars", "brand_related_keywords": ["Tesla prices", "EV cars", "affordable electric vehicles"], 
           "brand_user_intent": "I want to check how LLMs are comparing the prices of Tesla with other EV cars." }
 result = asyncio.run(workflow.ainvoke(inputs,config={"callbacks": [tracer]}))
 

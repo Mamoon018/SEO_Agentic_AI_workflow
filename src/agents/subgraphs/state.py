@@ -38,8 +38,9 @@ class prompt_generator_subgraph_state(MessagesState):
 
 class prompts_caller_subgraph_state(MessagesState):
 
-    # contextual prompts will be received as an input variable for the node
-    contextual_prompts: list[str] 
+    # contextual prompts received by the subgraph from the main graph
+    contextual_prompts: list[str]
+
     # llm name to be used will be received as an input variable for the node
     llm_name: str
 
