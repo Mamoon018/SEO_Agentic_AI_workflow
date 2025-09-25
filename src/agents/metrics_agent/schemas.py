@@ -83,23 +83,15 @@ class brand_cited_prompts_categories_schema(BaseStructuredModel):
 class brand_citation_rank_schema(BaseStructuredModel):
     """
     It represent the fields that gives an idea about the brand ranking in the llm response, relative to its competitors. It gives
-    highest rank and its prompt, lowest rank and prompt for which it is lowest ranked. 
+    highest rank in the llm respons because it is possible brand name is mentioned multiple times and respective prompt.
     """
     highest_rank: int = Field(
         ...,
         description="It is the highest rank of the brand relative to its competitors in the llm response i.e 2"
     )
-    highest_prompt: str = Field(
+    given_prompt: str = Field(
         ...,
-        description= "It is prompt for which the brand was ranked highest"
-    )
-    lowest_rank: int = Field(
-        ...,
-        description= "It is the lowest rank of the brand, if there is a prompt for which llm response refers to the brand at the last relative to its competitors it will be lowest rank"
-    )
-    lowest_prompt: str = Field(
-        ..., 
-        description= "It is the prompt for which brand was ranked lowest"
+        description= "It is prompt for which rank is calculated"
     )
 
 class brand_sentiment_analysis_schema(BaseStructuredModel):
@@ -124,6 +116,24 @@ class brand_sentiment_phrases_Schema(BaseStructuredModel):
         description= "It is the prompt of which llm response was used to get the sentiment phrase"
     )
 
+class brand_competitor_phrases_schema(BaseStructuredModel):
+    """
+    It represent the fields that gives an idea about the competitors that were mentioned when brand name was not referred in any of the contextual prompt, 
+    sentiment asosciated with that competitor, and EXACT phrase which is driving the sentiment regarding the competitor. 
+    """
+    competitor_name: str = Field(
+        ..., 
+        description= "It is the competitor name that was mentioned in the llm response"
+    )
+    comeptitor_sentiment: str = Field(
+        ...,
+        description= "It is the sentiment associated with the competitor in the llm response"
+    )
+    phrase_of_competitor_sentiment: str = Field(
+        ..., 
+        description= "It is the EXACT phrase that driving the sentiment of the competitor"
+    )
+
 
 
 
@@ -140,17 +150,21 @@ class Brand_geo_metrics_compilation(BaseStructuredModel):
         ...,
         description= "It contains the datapoints related to the metric cited prompts categories"
     )
-    citation_rank: list[brand_citation_rank_schema] = Field(
+    citation_rank: Annotated[list[brand_citation_rank_schema],operator.add] = Field(
         ...,
         description= "It contains the datapoints related to the ranking of the brand in the llm response"
     )
-    brand_sentiment: list[brand_sentiment_analysis_schema] = Field(
+    brand_sentiment: Annotated[list[brand_sentiment_analysis_schema],operator.add] = Field(
         ...,
         description= "It includes datapoint related to the sentiment of the brand"
     )
     brand_sentiment_phrases: Annotated[list[brand_sentiment_phrases_Schema],operator.add] = Field(
         ...,
         description= " It includes the datapoints related to the brand sentiment phrases"
+    )
+    brand_competitor_phrases: Annotated[list[brand_competitor_phrases_schema],operator.add] = Field(
+        ...,
+        description= "It includes the datapoints related to the brand competitors"
     )
 
 
@@ -164,3 +178,97 @@ class BRAND_GEO_METRICS_SCHEMA(BaseStructuredModel):
     )
 
 
+
+            ## ARTICLES GEO METRICS CALCULATION ##
+
+class articles_prompts_cited_score_Schema(BaseStructuredModel):
+    """
+    It represents the datapoints related to the visibility of the article in the contextual prompts responses
+    """
+    num_visible_prompts: int = Field(
+        ..., 
+        description= "It is the number of prompts that for which llm responses cited the article domain"
+    )
+    visible_prompts: list[str] = Field(
+        ..., 
+        description= "It is the list of the contextual prompts for which llm response have cited the article domain in some way i.e ['prompt1','prompt2']"
+    )
+
+class articles_cited_prompts_categories_Schema(BaseStructuredModel):
+    """
+    It represent the type of the contextual prompts that have cited the article domain. It gives an idea that for what
+    sort of prompts llm is pulling the content from the article domain.
+    """
+    cited_categories: list[str] = Field(
+        ...,
+        description= "It is the list of the 'type' of prompts that have cited the article domain"
+    )
+
+class articles_citation_rank_Schema(BaseStructuredModel):
+    """
+    It contains the details about the ranking of the article domain citation relative to its competitors
+    """
+    highest_rank: str = Field(
+        ...,
+        description= "It contains the ranking of the article domain for the given prompt"
+    )
+    given_prompt: str = Field(
+        ...,
+        description= "It contains the prompt for given ranking of the article domain was calculated"
+    )
+
+class articles_missed_content_details_Schema(BaseStructuredModel):
+    """
+    Represents details associated with each missed content item.
+    """
+    content: list[str] = Field(
+        ...,
+        description="topics, phrases, lines, key terms that exist in LLM answers but not in user articles. Focus on primary stuff in LLM answer not some generic stuff, important terms that help help answer prompt for that LLM answer"
+    )
+    evidence: list[str] = Field(
+        ...,
+        description="Exact sentence or long phrase from LLM answer that you used to construct the missed content suggestions"
+    )
+    missed_content_prompt: str = Field(
+        ...,
+        description="Prompt that the LLM answer belonged to"
+    )
+    missed_content_suggestions: list[str] = Field(
+        ...,
+        description="2 sentences, very specific suggestion for users to integrate the missed content into their article. Make sure the suggestion is very relevant with example to the user's existing article content, tone and context"
+    )
+
+
+class ARTICLES_GEO_METRICS_COMPILATION(BaseStructuredModel):
+    """
+    It represent the datapoints related to the article visibility on the llm responses. 
+    """
+    articles_prompts_cited_score: list[articles_prompts_cited_score_Schema] = Field(
+        ...,
+        description= "It contains the datapoints related score of citation"
+    )
+
+    articles_cited_prompts_categories: list[articles_cited_prompts_categories_Schema] = Field(
+        ...,
+        description= "It contains the datapoints related to the type of contextual prompts"
+    )
+    
+    articles_citation_ranking: Annotated[list[articles_citation_rank_Schema],operator.add] = Field(
+        ...,
+        description= "It contains the list of the prompts in which article domain was cited and ranking of the article domain for the given prompt"
+    )
+
+    articles_missed_content: Annotated[list[articles_missed_content_details_Schema], operator.add] = Field(
+        ...,
+        description= "It contains the details related to the gaps in the article content in context of the llm answers for each prompt"
+    )
+
+    
+class ARTICLE_GEO_METRICS_SCHEMA(BaseStructuredModel):
+    """
+    It represent the datapoints related to the visibility of the article in AI responses generated by the LLMs. 
+    """
+    article_metrics: list[ARTICLES_GEO_METRICS_COMPILATION] = Field(
+        ...,
+        description= "It represent the metrics of article visibility on AI platforms"
+    )

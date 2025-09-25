@@ -1,21 +1,32 @@
 
 from src.agents.metrics_agent.state import metrics_state
-from src.agents.metrics_agent.schemas import PROMPT_CITATION_FORMATTER_SCHEMA,BRAND_GEO_METRICS_SCHEMA
+from src.agents.metrics_agent.schemas import PROMPT_CITATION_FORMATTER_SCHEMA,BRAND_GEO_METRICS_SCHEMA, ARTICLE_GEO_METRICS_SCHEMA
 from src.agents.subgraphs.edges import prompt_caller_builder_workflow
-from src.agents.metrics_agent.prompts import BRAND_GEO_METRICS_PROMPT
+from src.agents.metrics_agent.prompts import BRAND_GEO_METRICS_PROMPT, ARTICLE_GEO_METRICS_PROMPT
 from langchain_core.prompts import PromptTemplate
 from langchain_core.messages import HumanMessage
 from src.utils.models_initializer import initialize_model_with_fallbacks
 from src.utils.models_initializer import get_openai_model,get_gemini_model
-from typing import Any
+from typing import Any, Optional, Union
+from pydantic import AnyUrl
 
-# lets initialize model for the brand_geo_metrics_node
+# lets initialize model for the brand geo metrics calculator
 GEO_METRICS_MODEL_WITH_FALLBACK = initialize_model_with_fallbacks(
     primary_model_fn=get_openai_model,
     primary_model_kwargs={"model_num":2, "temperature":0.2},
     fallback_model_fns=[get_gemini_model],
     fallback_model_kwargs_list=[{"model_num":1,"temperature":0.2}],
     structured_output_schema=BRAND_GEO_METRICS_SCHEMA
+
+)
+
+# lets initialize the model for the article geo metrics calculator
+ARTICLE_GEO_METRICS_MODEL_WITH_FALLBACK = initialize_model_with_fallbacks(
+    primary_model_fn=get_openai_model,
+    primary_model_kwargs={"model_num":2, "temperature":0.2},
+    fallback_model_fns=[get_gemini_model],
+    fallback_model_kwargs_list=[{"model_num":1,"temperature":0.2}],
+    structured_output_schema=ARTICLE_GEO_METRICS_SCHEMA
 
 )
 
@@ -99,7 +110,7 @@ async def brand_prompt_caller_subgraph_invokder(state:metrics_state):
         raise RuntimeError(f"Error raised in brand prompt caller subgraph invoker due to {e}") from e 
 
 
-async def brand_geo_metrics(state:metrics_state):
+async def brand_geo_metrics_calculator(state:metrics_state):
 
     """
     It takes the llm response, citations that appear in the response and their details to calculate the 
@@ -124,7 +135,7 @@ async def brand_geo_metrics(state:metrics_state):
     brand_geo_metrics_prompt = prompt.format(prompts_with_citations=prompts_with_citations, brand_name= brand_name)
 
     # lets initialize the object to store output
-    brand_metrics: list[Any]
+    brand_geo_metrics: list[Any]
 
     try:
         # lets invoke the llm 
@@ -132,10 +143,59 @@ async def brand_geo_metrics(state:metrics_state):
             [HumanMessage(content=brand_geo_metrics_prompt)]
         )
 
-        brand_metrics = brand_geo_metrics_response.brand_metrics
+        brand_geo_metrics = brand_geo_metrics_response.brand_metrics
 
         return {
-            "brand_metrics": brand_metrics
+            "brand_geo_metrics": brand_geo_metrics
+        }
+
+    except Exception as e:
+        raise RuntimeError(f"Error occurred in brand geo metrics due to {e}") from e 
+    
+
+# Article geo metrics node
+async def article_geo_metrics_calculator(state:metrics_state):
+
+    """
+    It takes the llm response, citations that appear in the response and their details to calculate the 
+    metrics according to the given criteria. 
+
+    **Args:**
+    prompts_with_citations (list[dict[str,str|list[dict[str,str]]]]): It is the formatted response of the llm for the contextual
+    prompts which will be used to calculate metrics.
+
+    **Returns:**
+    article_geo_metrics (list): It returns the list of different geo metrics for the brand visibility
+    
+    """
+
+    # lets get the input variables from the state
+    
+    # Article domain
+    article_domain: AnyUrl = state["article_domain"]
+    # Article/domain extracted text 
+    scrapped_text: Optional[Union[dict[str,str],str]] = state["scrapped_text"]
+    # llm response for the contextual prompts
+    prompts_with_citations: list[dict[str,str|list[dict[str,str]]]] = state["prompts_with_citations"]
+
+
+    # lets get the prompt 
+    prompt = PromptTemplate(input_variables=["article_domain","scrapped_text", "prompts_with_citations"], template= ARTICLE_GEO_METRICS_PROMPT )
+    article_geo_metrics_prompt = prompt.format(article_domain=article_domain, scrapped_text= scrapped_text, prompts_with_citations=prompts_with_citations )
+
+    # lets initialize the object to store output
+    article_geo_metrics: list[Any] = []
+
+    try:
+        # lets invoke the llm 
+        article_geo_metrics_response: ARTICLE_GEO_METRICS_SCHEMA = await ARTICLE_GEO_METRICS_MODEL_WITH_FALLBACK.ainvoke(
+            [HumanMessage(content=article_geo_metrics_prompt)]
+        )
+
+        article_geo_metrics = article_geo_metrics_response.article_metrics
+
+        return {
+            "article_geo_metrics": article_geo_metrics
         }
 
     except Exception as e:

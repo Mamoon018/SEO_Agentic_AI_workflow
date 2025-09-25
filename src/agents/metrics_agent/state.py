@@ -1,6 +1,7 @@
 
 from langgraph.graph import MessagesState
-from typing import Annotated, Union, Optional, Any
+from typing import Union, Optional, Any
+from pydantic import AnyUrl
 
 class metrics_state(MessagesState):
 
@@ -12,7 +13,10 @@ class metrics_state(MessagesState):
     brand_name: str 
 
     # Article/domain extracted text 
-    scrapped_text: Optional[Union[dict[str,str],str]] 
+    scrapped_text: Optional[Union[dict[str,str],str]]
+
+    # Article domain 
+    article_domain: AnyUrl
 
                     
                     #### Subgraphs (Output of the subgraphs)
@@ -24,11 +28,14 @@ class metrics_state(MessagesState):
     # article related contextual prompts
     article_contextual_prompts: list[str]
 
+    # article metrics
+    article_geo_metrics: list[Any]
+
 
                     #### Brand branch (Output of the brand specialized nodes)
     # brand related contextual prompts
     brand_contextual_prompts: list[str]
 
     # brand metrics 
-    geo_brand_metrics: list[Any]
+    brand_geo_metrics: list[Any]
 

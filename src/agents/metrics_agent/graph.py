@@ -16,9 +16,9 @@ opik_api_key = get_key(settings.OPIK_API_KEY)
                                     ####  Metrics workflow  ####
 
 tracer = OpikTracer(graph=geo_metrics_workflow.get_graph(xray=True),project_name= opik_project_name)
-inputs = {"task_label":"Brand task", "brand_contextual_prompts": [
+inputs = {"task_label":"Article task", "article_contextual_prompts": [
     "what are the best models in EV cars?",
     "what are the best tesla models?"
   ],
-  "scrapped_text": scrapped_text, "brand_name": "Tesla" }
+  "scrapped_text": scrapped_text, "article_domain": "https://www.drivingelectric.com/best-cars/584/best-electric-cars" }
 result = asyncio.run(geo_metrics_workflow.ainvoke(inputs,config={"callbacks": [tracer]}))

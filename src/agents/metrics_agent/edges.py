@@ -1,6 +1,6 @@
 
 from langgraph.graph import StateGraph, START, END
-from src.agents.metrics_agent.nodes import article_prompt_caller_subgraph_invoker, brand_prompt_caller_subgraph_invokder,brand_geo_metrics
+from src.agents.metrics_agent.nodes import article_prompt_caller_subgraph_invoker, brand_prompt_caller_subgraph_invokder,brand_geo_metrics_calculator, article_geo_metrics_calculator
 from src.agents.metrics_agent.state import metrics_state
 
 
@@ -24,7 +24,8 @@ builder = StateGraph(metrics_state)
 
 builder.add_node(node="article_prompt_caller_subgraph_invoker", action=article_prompt_caller_subgraph_invoker)
 builder.add_node(node="brand_prompt_caller_subgraph_invokder", action=brand_prompt_caller_subgraph_invokder)
-builder.add_node(node="brand_geo_metrics",action=brand_geo_metrics)
+builder.add_node(node="brand_geo_metrics_calculator",action=brand_geo_metrics_calculator)
+builder.add_node(node="article_geo_metrics_calculator",action=article_geo_metrics_calculator)
 
 builder.add_conditional_edges(
     source= START,
@@ -34,7 +35,9 @@ builder.add_conditional_edges(
     }
     )
 
-builder.add_edge("brand_prompt_caller_subgraph_invokder","brand_geo_metrics")
-builder.add_edge("brand_geo_metrics",END)
+builder.add_edge("brand_prompt_caller_subgraph_invokder","brand_geo_metrics_calculator")
+builder.add_edge("brand_geo_metrics_calculator",END)
+builder.add_edge("article_prompt_caller_subgraph_invoker","article_geo_metrics_calculator")
+builder.add_edge("article_geo_metrics_calculator",END)
 geo_metrics_workflow = builder.compile()
 
