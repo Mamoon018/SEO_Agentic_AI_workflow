@@ -1,9 +1,9 @@
 
 from src.agents.metrics_agent.state import metrics_state
-from src.agents.metrics_agent.schemas import PROMPT_CITATION_FORMATTER_SCHEMA,BRAND_GEO_METRICS_SCHEMA, ARTICLE_GEO_METRICS_SCHEMA
+from src.agents.metrics_agent.schemas import BRAND_GEO_METRICS_SCHEMA, ARTICLE_GEO_METRICS_SCHEMA
 from src.agents.subgraphs.edges import prompt_caller_builder_workflow
 from src.agents.metrics_agent.prompts import BRAND_GEO_METRICS_PROMPT, ARTICLE_GEO_METRICS_PROMPT
-from langchain_core.prompts import PromptTemplate
+from langchain_core.prompts import PromptTemplate 
 from langchain_core.messages import HumanMessage
 from src.utils.models_initializer import initialize_model_with_fallbacks
 from src.utils.models_initializer import get_openai_model,get_gemini_model
@@ -57,7 +57,7 @@ async def article_prompt_caller_subgraph_invoker(state:metrics_state):
 
     try:
         # lets invoke the prompts caller subgraph
-        formatted_citations: PROMPT_CITATION_FORMATTER_SCHEMA = await prompt_caller_builder_workflow.ainvoke(input={"contextual_prompts":article_contextual_prompts})
+        formatted_citations = await prompt_caller_builder_workflow.ainvoke(input={"contextual_prompts":article_contextual_prompts})
 
         # lets get the output of the subgraph
         prompts_with_citations = formatted_citations["prompts_with_citations"]
@@ -97,7 +97,7 @@ async def brand_prompt_caller_subgraph_invokder(state:metrics_state):
     try:
 
         # lets invoke the subgraph 
-        formatted_citations: PROMPT_CITATION_FORMATTER_SCHEMA = await prompt_caller_builder_workflow.ainvoke(input={"contextual_prompts":brand_contextual_prompts})
+        formatted_citations = await prompt_caller_builder_workflow.ainvoke(input={"contextual_prompts":brand_contextual_prompts})
 
         # lets fetch the results from subgraph 
         prompts_with_citations = formatted_citations["prompts_with_citations"]
@@ -200,3 +200,8 @@ async def article_geo_metrics_calculator(state:metrics_state):
 
     except Exception as e:
         raise RuntimeError(f"Error occurred in brand geo metrics due to {e}") from e 
+    
+
+
+
+
